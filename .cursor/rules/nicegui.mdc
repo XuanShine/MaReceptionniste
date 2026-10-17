@@ -1,0 +1,33 @@
+---
+description: Référence NiceGUI (llms.md) à suivre pour tout code UI du projet
+alwaysApply: true
+---
+
+# NiceGUI
+
+Ce projet utilise NiceGUI. La référence officielle pour la version installée est @llms.md
+(copie de `nicegui/llms.md` du paquet ; la relire avant d'écrire ou modifier du code NiceGUI).
+
+Points à ne jamais oublier :
+
+- **Python d'abord** : `ui.*`, `.classes()` (Tailwind/Quasar), `.props()` avant CSS brut, `ui.add_head_html` ou `ui.run_javascript`.
+- **Pas d'état global mutable** : état par utilisateur dans des variables locales du `@ui.page` ou `app.storage.user`.
+- **Ne pas bloquer la boucle asyncio** : I/O bloquant (SQLModel synchrone, hash de mot de passe…) via `await run.io_bound(fn, *args)`, calcul lourd via `run.cpu_bound`.
+- **Tâches de fond** : `background_tasks.create(...)`, jamais `asyncio.create_task`.
+- **Mises à jour UI** : bindings ou `.set_text()`/`.set_value()` pour une valeur, `@ui.refreshable` pour reconstruire une section.
+- **Page builder** : timeout de 3 s ; charger les données lentes en tâche de fond.
+- **Tests UI** : fixture `User` de `nicegui.testing` (sans navigateur), `Screen` seulement si un vrai rendu JS est nécessaire.
+
+```python
+# ❌ bloque tous les utilisateurs
+def ajouter():
+    with get_session() as session:
+        session.add(client); session.commit()
+
+# ✅
+async def ajouter():
+    await run.io_bound(enregistrer_client, client)
+```
+
+Si la version de NiceGUI change (`uv lock --upgrade`), recopier le fichier :
+`cp .venv/lib/python3.12/site-packages/nicegui/llms.md llms.md`

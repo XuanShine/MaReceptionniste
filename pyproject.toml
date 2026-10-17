@@ -1,0 +1,35 @@
+[project]
+name = "ma-receptionniste"
+version = "0.1.0"
+description = "Application de réception (NiceGUI + SQLModel)"
+readme = "README.md"
+authors = [
+    { name = "XuanShine", email = "xuan.ng@hotmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "nicegui>=3.18.0",
+    "sqlmodel>=0.0.48",
+]
+
+[project.scripts]
+ma-receptionniste = "ma_receptionniste:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

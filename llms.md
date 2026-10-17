@@ -35,10 +35,11 @@ React and similar frameworks diff a virtual DOM and patch only what changed. Nic
 # BAD: destroys and recreates on every data change
 def show_count():
     container.clear()
-    ui.label(f'Count: {count}')
+    ui.label(f"Count: {count}")
+
 
 # GOOD: updates the existing element in place
-label = ui.label('Count: 0')
+label = ui.label("Count: 0")
 # then: label.set_text(f'Count: {count}') or bind_text_from
 ```
 
@@ -50,13 +51,15 @@ NiceGUI runs as a single Python process. Module-level variables are shared betwe
 # BUG: all users see the same data, last writer wins
 items = []
 
-@ui.page('/')
+
+@ui.page("/")
 def index():
-    ui.button('Add', on_click=lambda: items.append('x'))  # shared!
+    ui.button("Add", on_click=lambda: items.append("x"))  # shared!
     ui.label(str(items))
 
+
 # CORRECT: per-user state in app.storage or local variables inside @ui.page
-@ui.page('/')
+@ui.page("/")
 def index():
     items = []  # local to this page invocation = per user
     # or: app.storage.user['items'] for persistence across reloads
@@ -87,7 +90,7 @@ Consequence: **element creation order matters**, and you cannot place an element
 row = ui.row()
 # Too late to add to row here without entering its context:
 with row:
-    ui.label('This works')
+    ui.label("This works")
 # ui.label('This would go to page root, NOT inside row')
 ```
 
@@ -149,7 +152,7 @@ NiceGUI accumulates all element changes within a single event handler execution 
 The page builder function has a 3-second default timeout. If it takes longer, the client gets an error. Heavy work (DB queries, API calls, file loading) must be done via background tasks launched from within the page builder — the page delivers the skeleton UI immediately, then populates data asynchronously.
 
 ```python
-@ui.page('/')
+@ui.page("/")
 async def index():
     spinner = ui.spinner()
     label = ui.label()
@@ -195,12 +198,12 @@ Every element exposes three orthogonal styling methods that return `Self` (chain
 Apply **Tailwind CSS** or **Quasar utility classes**. This is the primary styling tool.
 
 ```python
-ui.label('Hello').classes('text-xl font-bold text-red-500')
-ui.card().classes('shadow-lg p-4 bg-grey-2')
+ui.label("Hello").classes("text-xl font-bold text-red-500")
+ui.card().classes("shadow-lg p-4 bg-grey-2")
 # remove a class
-element.classes(remove='bg-red-500')
+element.classes(remove="bg-red-500")
 # toggle
-element.classes(toggle='hidden')
+element.classes(toggle="hidden")
 ```
 
 ### `.style(add, *, remove, replace)`
@@ -208,7 +211,7 @@ element.classes(toggle='hidden')
 Inline CSS as a **semicolon-separated string**. Use only when no Tailwind/Quasar class fits.
 
 ```python
-ui.label('Hi').style('font-size: 2rem; color: #333')
+ui.label("Hi").style("font-size: 2rem; color: #333")
 ```
 
 ### `.props(add, *, remove)`
@@ -217,9 +220,9 @@ ui.label('Hi').style('font-size: 2rem; color: #333')
 Boolean props are `True` if no value is given.
 
 ```python
-ui.button('Send').props('unelevated rounded color=positive')
-ui.input('Name').props('outlined dense clearable')
-ui.table(...).props('flat bordered')
+ui.button("Send").props("unelevated rounded color=positive")
+ui.input("Name").props("outlined dense clearable")
+ui.table(...).props("flat bordered")
 ```
 
 ### `ui.query(selector)`
@@ -227,8 +230,8 @@ ui.table(...).props('flat bordered')
 Style arbitrary DOM elements (e.g. the page body):
 
 ```python
-ui.query('body').classes('bg-grey-1')
-ui.query('.nicegui-content').style('max-width: 960px; margin: auto')
+ui.query("body").classes("bg-grey-1")
+ui.query(".nicegui-content").style("max-width: 960px; margin: auto")
 ```
 
 ### Color values
@@ -246,10 +249,10 @@ A registered name then works like a Quasar color name: in the `color` parameter,
 These classes are `!important`, so no `!important` inline styles are needed to override Quasar.
 
 ```python
-app.colors(brand='#187C61', warn_soft='#FDE68A')  # underscores become dashes: warn-soft
-ui.button('Save', color='brand')
-ui.button('Details').props('flat text-color=brand')
-ui.label('Hint').classes('bg-warn-soft')
+app.colors(brand="#187C61", warn_soft="#FDE68A")  # underscores become dashes: warn-soft
+ui.button("Save", color="brand")
+ui.button("Details").props("flat text-color=brand")
+ui.label("Hint").classes("bg-warn-soft")
 ```
 
 ---
@@ -259,57 +262,57 @@ ui.label('Hint').classes('bg-warn-soft')
 All layout elements are used as context managers. Children are automatically placed inside them.
 
 ```python
-with ui.row():               # horizontal flex row (wrapping by default)
-    ui.button('A')
-    ui.button('B')
+with ui.row():  # horizontal flex row (wrapping by default)
+    ui.button("A")
+    ui.button("B")
 
-with ui.column():            # vertical flex column
-    ui.label('Top')
-    ui.label('Bottom')
+with ui.column():  # vertical flex column
+    ui.label("Top")
+    ui.label("Bottom")
 
-with ui.card():              # Quasar QCard with shadow
+with ui.card():  # Quasar QCard with shadow
     with ui.card_section():
-        ui.label('Title')
+        ui.label("Title")
 
-with ui.grid(columns=3):    # CSS grid
+with ui.grid(columns=3):  # CSS grid
     for i in range(9):
         ui.label(str(i))
 
-with ui.row().classes('w-full justify-between items-center'):
-    ui.label('Left')
-    ui.label('Right')
+with ui.row().classes("w-full justify-between items-center"):
+    ui.label("Left")
+    ui.label("Right")
 
-with ui.expansion('Details', icon='info'):
-    ui.label('Hidden content')
+with ui.expansion("Details", icon="info"):
+    ui.label("Hidden content")
 
-with ui.scroll_area().classes('h-64'):
+with ui.scroll_area().classes("h-64"):
     for i in range(50):
-        ui.label(f'Row {i}')
+        ui.label(f"Row {i}")
 
 with ui.splitter() as splitter:
     with splitter.before:
-        ui.label('Left pane')
+        ui.label("Left pane")
     with splitter.after:
-        ui.label('Right pane')
+        ui.label("Right pane")
 ```
 
 ### Page structure elements
 
 ```python
 with ui.header():
-    ui.label('My App')
+    ui.label("My App")
 
 with ui.left_drawer():
-    ui.label('Sidebar')
+    ui.label("Sidebar")
 
 with ui.footer():
-    ui.label('Footer')
+    ui.label("Footer")
 
-ui.page_sticky('bottom-right', x_offset=20, y_offset=20)  # floating content
+ui.page_sticky("bottom-right", x_offset=20, y_offset=20)  # floating content
 
-main = ui.column()                                   # a stable container to jump to
-ui.skip_link('Skip to main content', target=main)    # keyboard-only link (WCAG 2.4.1); hidden until Tab focus,
-                                                     # auto-moved to the top of the layout. target must be stable, not refreshable content.
+main = ui.column()  # a stable container to jump to
+ui.skip_link("Skip to main content", target=main)  # keyboard-only link (WCAG 2.4.1); hidden until Tab focus,
+# auto-moved to the top of the layout. target must be stable, not refreshable content.
 ```
 
 ---
@@ -317,28 +320,29 @@ ui.skip_link('Skip to main content', target=main)    # keyboard-only link (WCAG 
 ## Input Elements
 
 ```python
-ui.input('Name', value='Alice', on_change=handler)
-ui.input('Password', password=True, password_toggle_button=True)
-ui.textarea('Notes', rows=5)
-ui.number('Age', min=0, max=120, step=1)
-ui.select(['a', 'b', 'c'], value='a', on_change=handler)
-ui.select({'Option A': 1, 'Option B': 2}, value=1)  # dict: label→value
-ui.checkbox('Agree', value=False, on_change=handler)
-ui.switch('Dark mode', value=False)
-ui.radio(['Yes', 'No', 'Maybe'], value='Yes')
-ui.toggle(['Left', 'Center', 'Right'], value='Left')
+ui.input("Name", value="Alice", on_change=handler)
+ui.input("Password", password=True, password_toggle_button=True)
+ui.textarea("Notes", rows=5)
+ui.number("Age", min=0, max=120, step=1)
+ui.select(["a", "b", "c"], value="a", on_change=handler)
+ui.select({"Option A": 1, "Option B": 2}, value=1)  # dict: label→value
+ui.checkbox("Agree", value=False, on_change=handler)
+ui.switch("Dark mode", value=False)
+ui.radio(["Yes", "No", "Maybe"], value="Yes")
+ui.toggle(["Left", "Center", "Right"], value="Left")
 ui.slider(min=0, max=100, step=1, value=50)
-ui.range(min=0, max=100, value={'min': 20, 'max': 80})
+ui.range(min=0, max=100, value={"min": 20, "max": 80})
 ui.knob(value=0.5, min=0, max=1, step=0.01)
 ui.rating(max=5, value=3)
-ui.color_input('Color', value='#ff0000')
-ui.date(value='2024-01-01')              # returns ISO string
-ui.time(value='12:00')
-ui.date_input('Birthday')               # combined date picker + text input
-ui.time_input('Time')
-ui.upload(on_upload=handler, multiple=True,
-          auto_upload=True, max_file_size=10_000_000, max_files=5, max_total_size=50_000_000)
-ui.input_chips('Tags')                  # chip-based multi-value input
+ui.color_input("Color", value="#ff0000")
+ui.date(value="2024-01-01")  # returns ISO string
+ui.time(value="12:00")
+ui.date_input("Birthday")  # combined date picker + text input
+ui.time_input("Time")
+ui.upload(
+    on_upload=handler, multiple=True, auto_upload=True, max_file_size=10_000_000, max_files=5, max_total_size=50_000_000
+)
+ui.input_chips("Tags")  # chip-based multi-value input
 ```
 
 ---
@@ -346,51 +350,66 @@ ui.input_chips('Tags')                  # chip-based multi-value input
 ## Display Elements
 
 ````python
-ui.label('Hello World')
-ui.markdown('**Bold** and *italic*')
-ui.markdown('```mermaid\ngraph TD; A-->B\n```',
-            extras=['fenced-code-blocks', 'tables', 'mermaid'])  # `extras` REPLACES the default ['fenced-code-blocks', 'tables']
-ui.markdown.default_extras = ['fenced-code-blocks', 'tables', 'mermaid']  # change the default for all ui.markdown (since 3.14)
-ui.code('print("hello")', language='python')
-editor = ui.codemirror('def f():\n    return 42', language='Python')  # editable code editor
-editor.line_anchors = {'a': 2}          # line anchors (since 3.16): stable {id: line} references that follow
-                                        # their line through edits; read back for the current positions,
-                                        # on_anchor_change= fires whenever a tracked position moves
-editor.decorations = [                  # decorations (since 3.17): style, hide or annotate text without changing it
-    {'kind': 'mark', 'from': 4, 'to': 5, 'class': 'bg-yellow-200'},        # style a character range
-    {'kind': 'line', 'line': 2, 'class': 'bg-red-100'},                    # style a whole line (1-indexed)
-    {'kind': 'replace', 'from': 13, 'to': 22, 'text': '…'},                 # hide a range, or show `text` instead (block=True folds lines)
-    {'kind': 'widget', 'position': 0, 'text': '# hint', 'side': -1},       # insert text at a position (side: -1 before, 1 after)
-]                                       # from/to/position are Python str indices into editor.value; `class` takes Tailwind
-                                        # or your own CSS; in-place list edits sync too; reading back returns the specs as
-                                        # declared (positions are not tracked like line anchors); decoration_html=True
-                                        # renders `text` as sanitized HTML; `attributes` is applied raw — never pass untrusted input
-editor.reveal_line(42)                  # scroll a 1-indexed line into view (since 3.18)
-editor.on_focus_change(lambda e: ...)   # editor signals (since 3.18): e.focused
+ui.label("Hello World")
+ui.markdown("**Bold** and *italic*")
+ui.markdown(
+    "```mermaid\ngraph TD; A-->B\n```", extras=["fenced-code-blocks", "tables", "mermaid"]
+)  # `extras` REPLACES the default ['fenced-code-blocks', 'tables']
+ui.markdown.default_extras = [
+    "fenced-code-blocks",
+    "tables",
+    "mermaid",
+]  # change the default for all ui.markdown (since 3.14)
+ui.code('print("hello")', language="python")
+editor = ui.codemirror("def f():\n    return 42", language="Python")  # editable code editor
+editor.line_anchors = {"a": 2}  # line anchors (since 3.16): stable {id: line} references that follow
+# their line through edits; read back for the current positions,
+# on_anchor_change= fires whenever a tracked position moves
+editor.decorations = [  # decorations (since 3.17): style, hide or annotate text without changing it
+    {"kind": "mark", "from": 4, "to": 5, "class": "bg-yellow-200"},  # style a character range
+    {"kind": "line", "line": 2, "class": "bg-red-100"},  # style a whole line (1-indexed)
+    {
+        "kind": "replace",
+        "from": 13,
+        "to": 22,
+        "text": "…",
+    },  # hide a range, or show `text` instead (block=True folds lines)
+    {
+        "kind": "widget",
+        "position": 0,
+        "text": "# hint",
+        "side": -1,
+    },  # insert text at a position (side: -1 before, 1 after)
+]  # from/to/position are Python str indices into editor.value; `class` takes Tailwind
+# or your own CSS; in-place list edits sync too; reading back returns the specs as
+# declared (positions are not tracked like line anchors); decoration_html=True
+# renders `text` as sanitized HTML; `attributes` is applied raw — never pass untrusted input
+editor.reveal_line(42)  # scroll a 1-indexed line into view (since 3.18)
+editor.on_focus_change(lambda e: ...)  # editor signals (since 3.18): e.focused
 editor.on_viewport_change(lambda e: ...)  # e.from_line / e.to_line, first and last visible line (throttled to 100 ms)
 editor.on_geometry_change(lambda e: ...)  # e.width / e.height / e.content_height (throttled to 100 ms)
-                                        # all three also as constructor kwargs; a signal is only computed while a listener exists
-ui.image('/path/to/image.png')          # or URL or base64
-ui.audio('/path/to/audio.mp3')
-ui.video('/path/to/video.mp4')
-ui.icon('thumb_up', size='2rem', color='green')   # Material Design icons
-ui.avatar('JD', color='blue')           # initials or image
-ui.badge('3', color='red')
-ui.chip('Tag', icon='label', color='primary')
+# all three also as constructor kwargs; a signal is only computed while a listener exists
+ui.image("/path/to/image.png")  # or URL or base64
+ui.audio("/path/to/audio.mp3")
+ui.video("/path/to/video.mp4")
+ui.icon("thumb_up", size="2rem", color="green")  # Material Design icons
+ui.avatar("JD", color="blue")  # initials or image
+ui.badge("3", color="red")
+ui.chip("Tag", icon="label", color="primary")
 ui.separator()
-ui.space()                              # flexible spacer (flex: 1)
-ui.spinner(size='lg', color='primary')
-ui.skeleton(type='rect', height='2rem')
-ui.circular_progress(value=0.4, min=0, max=1, size='xl', color='primary')
+ui.space()  # flexible spacer (flex: 1)
+ui.spinner(size="lg", color="primary")
+ui.skeleton(type="rect", height="2rem")
+ui.circular_progress(value=0.4, min=0, max=1, size="xl", color="primary")
 ui.linear_progress(value=0.4, show_value=True)
-ui.link('Click here', target='https://example.com')
-ui.link_target('section-1')             # in-page anchor, pair with ui.link(target='#section-1')
-ui.html('<b>raw</b> HTML')             # use sparingly
-ui.element('div').classes('grid grid-cols-3 gap-2')  # generic escape hatch for arbitrary tags
-with ui.timeline():                                  # activity feed
-    ui.timeline_entry('Did the thing', title='Step 1', subtitle='10:00')
-ui.chat_message('Hello!', name='Alice', stamp='now', avatar='...')
-ui.log(max_lines=100)                  # live-updating log display
+ui.link("Click here", target="https://example.com")
+ui.link_target("section-1")  # in-page anchor, pair with ui.link(target='#section-1')
+ui.html("<b>raw</b> HTML")  # use sparingly
+ui.element("div").classes("grid grid-cols-3 gap-2")  # generic escape hatch for arbitrary tags
+with ui.timeline():  # activity feed
+    ui.timeline_entry("Did the thing", title="Step 1", subtitle="10:00")
+ui.chat_message("Hello!", name="Alice", stamp="now", avatar="...")
+ui.log(max_lines=100)  # live-updating log display
 ````
 
 ---
@@ -400,21 +419,23 @@ ui.log(max_lines=100)                  # live-updating log display
 ```python
 # Table (Quasar QTable)
 columns = [
-    {'name': 'name', 'label': 'Name', 'field': 'name', 'sortable': True},
-    {'name': 'age', 'label': 'Age', 'field': 'age'},
+    {"name": "name", "label": "Name", "field": "name", "sortable": True},
+    {"name": "age", "label": "Age", "field": "age"},
 ]
-rows = [{'name': 'Alice', 'age': 30}, {'name': 'Bob', 'age': 25}]
-ui.table(columns=columns, rows=rows, row_key='name')
+rows = [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]
+ui.table(columns=columns, rows=rows, row_key="name")
 
 # AG Grid (advanced grid)
-grid = ui.aggrid({
-    'columnDefs': [
-        {'field': 'name'},
-        {'field': 'age', ':valueFormatter': 'params => `${params.value} years`'},
-    ],
-    'rowData': rows,
-    ':getRowId': 'params => params.data.name',  # stable row IDs; needed for run_row_method and row updates
-})
+grid = ui.aggrid(
+    {
+        "columnDefs": [
+            {"field": "name"},
+            {"field": "age", ":valueFormatter": "params => `${params.value} years`"},
+        ],
+        "rowData": rows,
+        ":getRowId": "params => params.data.name",  # stable row IDs; needed for run_row_method and row updates
+    }
+)
 # Options are sent as JSON, so a string stays a string. Prefix a key with ':' to have its value
 # evaluated as a JavaScript expression (functions, regexes, objects) — without the colon, AG Grid
 # gets a plain string where it expects a function, shows no rows and only logs a TypeError in the browser.
@@ -422,20 +443,30 @@ grid = ui.aggrid({
 # Build from a pandas DataFrame (auto column defs):
 # grid = ui.aggrid.from_pandas(df)
 
+
 # Drive the client-side AG Grid API from Python (from inside an async handler):
 async def select_all():
-    await grid.run_grid_method('selectAll')
-    await grid.run_row_method('Alice', 'setSelected', True)  # row ID from getRowId (or the row index as a string)
+    await grid.run_grid_method("selectAll")
+    await grid.run_row_method("Alice", "setSelected", True)  # row ID from getRowId (or the row index as a string)
+
 
 # Tree
-ui.tree([
-    {'id': 'root', 'label': 'Root', 'children': [
-        {'id': 'child1', 'label': 'Child 1'},
-    ]}
-], label_key='label', node_key='id')
+ui.tree(
+    [
+        {
+            "id": "root",
+            "label": "Root",
+            "children": [
+                {"id": "child1", "label": "Child 1"},
+            ],
+        }
+    ],
+    label_key="label",
+    node_key="id",
+)
 
 # JSON editor
-ui.json_editor({'content': {'json': {'key': 'value'}}})
+ui.json_editor({"content": {"json": {"key": "value"}}})
 ```
 
 ---
@@ -444,24 +475,28 @@ ui.json_editor({'content': {'json': {'key': 'value'}}})
 
 ```python
 # ECharts (versatile, good default for most chart types)
-ui.echart({
-    'xAxis': {'type': 'category', 'data': ['Mon', 'Tue', 'Wed']},
-    'yAxis': {'type': 'value'},
-    'series': [{'type': 'bar', 'data': [120, 200, 150]}],
-})
+ui.echart(
+    {
+        "xAxis": {"type": "category", "data": ["Mon", "Tue", "Wed"]},
+        "yAxis": {"type": "value"},
+        "series": [{"type": "bar", "data": [120, 200, 150]}],
+    }
+)
 # From a pyecharts Chart object:
 # ui.echart.from_pyecharts(pyecharts_chart)
 
 # Plotly
 import plotly.graph_objects as go
-fig = go.Figure(go.Bar(x=['A', 'B'], y=[1, 2]))
+
+fig = go.Figure(go.Bar(x=["A", "B"], y=[1, 2]))
 plot = ui.plotly(fig)
 # Drive plotly.js directly instead of re-sending the whole figure (efficient for live/streaming data):
-plot.run_plot_method('extendTraces', {'x': [[3]], 'y': [[5]]}, [0])  # append a point to trace 0
+plot.run_plot_method("extendTraces", {"x": [[3]], "y": [[5]]}, [0])  # append a point to trace 0
 
 # Matplotlib / pyplot
 with ui.pyplot(figsize=(6, 4)) as plot:
     import matplotlib.pyplot as plt
+
     plt.plot([1, 2, 3], [4, 5, 6])
 
 # Live line plot (efficient for streaming data)
@@ -471,7 +506,7 @@ with ui.line_plot(n=50, update_every=5) as plot:
 # 3D Scene (Three.js)
 with ui.scene() as scene:
     scene.sphere().move(x=1)
-    scene.box().material('#ff0000')
+    scene.box().material("#ff0000")
 ```
 
 ### Custom Three.js objects (since 3.16)
@@ -484,11 +519,13 @@ The `component=` path is resolved relative to the Python file — no manual regi
 # pulsing_sphere.py
 from nicegui.elements.scene import Object3D
 
-class PulsingSphere(Object3D, component='pulsing_sphere.js'):
+
+class PulsingSphere(Object3D, component="pulsing_sphere.js"):
     def __init__(self, radius: float = 1.0) -> None:
         super().__init__(radius)
+
     def set_scale(self, s: float):
-        self.run_method('set_scale', s)
+        self.run_method("set_scale", s)
 ```
 
 ```js
@@ -522,59 +559,59 @@ Optional lifecycle hooks (the framework calls them only if defined): `apply_mate
 ```python
 # Tabs
 with ui.tabs() as tabs:
-    ui.tab('home', label='Home', icon='home')
-    ui.tab('settings', label='Settings', icon='settings')
-with ui.tab_panels(tabs, value='home'):
-    with ui.tab_panel('home'):
-        ui.label('Home content')
-    with ui.tab_panel('settings'):
-        ui.label('Settings content')
+    ui.tab("home", label="Home", icon="home")
+    ui.tab("settings", label="Settings", icon="settings")
+with ui.tab_panels(tabs, value="home"):
+    with ui.tab_panel("home"):
+        ui.label("Home content")
+    with ui.tab_panel("settings"):
+        ui.label("Settings content")
 
 # Dialog
 with ui.dialog() as dialog:
     with ui.card():
-        ui.label('Are you sure?')
+        ui.label("Are you sure?")
         with ui.row():
-            ui.button('Yes', on_click=dialog.close)
-            ui.button('No', on_click=dialog.close)
-ui.button('Open', on_click=dialog.open)
+            ui.button("Yes", on_click=dialog.close)
+            ui.button("No", on_click=dialog.close)
+ui.button("Open", on_click=dialog.open)
 # dialog, menu and popup share open() / close() / toggle()
 
 # Popup (since 3.15): placed *inside* the element that should open it;
 # shown as a menu, or as a dialog below the "breakpoint" prop (default 450px)
-with ui.label('Click me'):
+with ui.label("Click me"):
     with ui.popup() as popup:
-        ui.input('Name').props('autofocus').on('keydown.enter', popup.close)
+        ui.input("Name").props("autofocus").on("keydown.enter", popup.close)
 
 # Menu
-with ui.button('Menu'):
+with ui.button("Menu"):
     with ui.menu():
-        ui.menu_item('Option 1', on_click=handler)
-        ui.menu_item('Option 2', on_click=handler)
+        ui.menu_item("Option 1", on_click=handler)
+        ui.menu_item("Option 2", on_click=handler)
 
 # Context menu
-with ui.label('Right-click me'):
+with ui.label("Right-click me"):
     with ui.context_menu():
-        ui.menu_item('Action', on_click=handler)
+        ui.menu_item("Action", on_click=handler)
 
 # Stepper
 with ui.stepper() as stepper:
-    with ui.step('Step 1'):
-        ui.label('First step')
+    with ui.step("Step 1"):
+        ui.label("First step")
         with ui.stepper_navigation():
-            ui.button('Next', on_click=stepper.next)
-    with ui.step('Step 2'):
-        ui.label('Second step')
+            ui.button("Next", on_click=stepper.next)
+    with ui.step("Step 2"):
+        ui.label("Second step")
         with ui.stepper_navigation():
-            ui.button('Back', on_click=stepper.previous)
-            ui.button('Finish')
+            ui.button("Back", on_click=stepper.previous)
+            ui.button("Finish")
 
 # Carousel
 with ui.carousel(animated=True) as carousel:
     with ui.carousel_slide():
-        ui.label('Slide 1')
+        ui.label("Slide 1")
     with ui.carousel_slide():
-        ui.label('Slide 2')
+        ui.label("Slide 2")
 
 # Pagination
 ui.pagination(min=1, max=10, direction_links=True)
@@ -588,32 +625,33 @@ Bind element properties to Python objects reactively. Changes propagate automati
 
 ```python
 class State:
-    name = 'Alice'
+    name = "Alice"
     visible = True
+
 
 state = State()
 
 # Two-way binding (element ↔ object)
-ui.input('Name').bind_value(state, 'name')
+ui.input("Name").bind_value(state, "name")
 
 # One-way: object → element (read-only display)
-ui.label().bind_text_from(state, 'name')
+ui.label().bind_text_from(state, "name")
 
 # One-way: element → object
-ui.input().bind_value_to(state, 'name')
+ui.input().bind_value_to(state, "name")
 
 # Visibility binding
-ui.label('Hello').bind_visibility_from(state, 'visible')
+ui.label("Hello").bind_visibility_from(state, "visible")
 
 # With value transformation
-ui.label().bind_text_from(state, 'name', backward=lambda v: f'Hello, {v}!')
+ui.label().bind_text_from(state, "name", backward=lambda v: f"Hello, {v}!")
 
 # Bind to dict key
-data = {'count': 0}
-ui.label().bind_text_from(data, 'count', backward=str)
+data = {"count": 0}
+ui.label().bind_text_from(data, "count", backward=str)
 
 # Bind to nested key (tuple path, since v3.10)
-ui.label().bind_text_from(state, ('nested', 'key'))
+ui.label().bind_text_from(state, ("nested", "key"))
 ```
 
 Available bind methods (all support `forward`/`backward` transform functions):
@@ -631,20 +669,24 @@ Available bind methods (all support `forward`/`backward` transform functions):
 Use `@ui.refreshable` to rebuild a section of the UI on demand:
 
 ```python
-items = ['Apple', 'Banana']
+items = ["Apple", "Banana"]
+
 
 @ui.refreshable
 def item_list():
     for item in items:
         ui.label(item)
 
+
 item_list()  # initial render
 
+
 def add_item():
-    items.append('Cherry')
+    items.append("Cherry")
     item_list.refresh()  # clears and rebuilds
 
-ui.button('Add', on_click=add_item)
+
+ui.button("Add", on_click=add_item)
 ```
 
 Use `ui.state()` for local state within a refreshable (React-style):
@@ -653,8 +695,8 @@ Use `ui.state()` for local state within a refreshable (React-style):
 @ui.refreshable
 def counter():
     count, set_count = ui.state(0)
-    ui.label(f'Count: {count}')
-    ui.button('+1', on_click=lambda: set_count(count + 1))
+    ui.label(f"Count: {count}")
+    ui.button("+1", on_click=lambda: set_count(count + 1))
 ```
 
 Use `@ui.refreshable_method` for methods in classes:
@@ -687,10 +729,12 @@ t.activate()
 t.deactivate()
 t.cancel()
 
+
 # Async callback
 async def update():
     data = await fetch_data()
     label.set_text(data)
+
 
 ui.timer(5.0, update)
 ```
@@ -701,20 +745,23 @@ ui.timer(5.0, update)
 
 ```python
 # Per-user private page (each visitor gets their own instance)
-@ui.page('/dashboard')
+@ui.page("/dashboard")
 def dashboard():
-    ui.label('Welcome!')
+    ui.label("Welcome!")
+
 
 # With path parameter (FastAPI style)
-@ui.page('/item/{item_id}')
+@ui.page("/item/{item_id}")
 def item_page(item_id: int):
-    ui.label(f'Item {item_id}')
+    ui.label(f"Item {item_id}")
+
 
 # Slow page builder? Raise the per-page timeout (default 3s; see Mental Model #10).
-@ui.page('/heavy', response_timeout=15)
+@ui.page("/heavy", response_timeout=15)
 async def heavy():
     data = await slow_query()
     ui.label(str(data))
+
 
 # Script mode: ui.* calls at the top level of the entry script (no @ui.page)
 # → NiceGUI re-executes the script once per client connection.
@@ -722,14 +769,14 @@ async def heavy():
 # State in *imported* modules is still process-wide (shared across users).
 
 # Navigation
-ui.navigate.to('/dashboard')
-ui.navigate.to('https://example.com', new_tab=True)
+ui.navigate.to("/dashboard")
+ui.navigate.to("https://example.com", new_tab=True)
 ui.navigate.back()
 ui.navigate.forward()
 ui.navigate.reload()
 
 # Page title
-ui.page_title('My App')
+ui.page_title("My App")
 ```
 
 ---
@@ -742,20 +789,20 @@ Requires `ui.run(storage_secret='...')` for `user` and `browser`.
 from nicegui import app
 
 # Per-user persistent storage (survives page reload, browser-session scoped)
-app.storage.user['username'] = 'Alice'
-name = app.storage.user.get('username', 'Guest')
+app.storage.user["username"] = "Alice"
+name = app.storage.user.get("username", "Guest")
 
 # Global shared storage (all users, persistent)
-app.storage.general['visit_count'] = app.storage.general.get('visit_count', 0) + 1
+app.storage.general["visit_count"] = app.storage.general.get("visit_count", 0) + 1
 
 # Per-connection in-memory (lost on page reload)
-app.storage.client['temp'] = 'value'
+app.storage.client["temp"] = "value"
 
 # Per-browser-tab in-memory
-app.storage.tab['step'] = 2
+app.storage.tab["step"] = 2
 
 # Read-only browser session data
-session_id = app.storage.browser.get('id')
+session_id = app.storage.browser.get("id")
 ```
 
 ---
@@ -764,23 +811,23 @@ session_id = app.storage.browser.get('id')
 
 ```python
 # Constructor callbacks (most common)
-ui.button('Click', on_click=handler)
-ui.input('Name', on_change=handler, on_focus=handler, on_blur=handler)
+ui.button("Click", on_click=handler)
+ui.input("Name", on_change=handler, on_focus=handler, on_blur=handler)
 ui.upload(on_upload=handler, on_rejected=handler)
 ui.keyboard(on_key=handler)
 
 # .on() for any DOM/Vue event
-ui.label('Hover me').on('mouseover', handler)
-ui.image(...).on('click', handler, ['offsetX', 'offsetY'])  # pass specific args
+ui.label("Hover me").on("mouseover", handler)
+ui.image(...).on("click", handler, ["offsetX", "offsetY"])  # pass specific args
 
 # Throttle high-frequency events
-ui.input().on('keydown', handler, throttle=0.1)
+ui.input().on("keydown", handler, throttle=0.1)
 
 # Client-side only (no server round-trip)
-ui.button().on('click', js_handler='() => alert("hello")')
+ui.button().on("click", js_handler='() => alert("hello")')
 
 # await a one-time event
-btn = ui.button('Click me')
+btn = ui.button("Click me")
 await btn.clicked()
 ```
 
@@ -792,18 +839,20 @@ Input/value events have `.value` and `.previous_value`.
 ## Notifications & Feedback
 
 ```python
-ui.notify('Saved!', type='positive')
-ui.notify('Error!', type='negative', position='top')
-ui.notify('Warning', type='warning', close_button='Dismiss')
-ui.notify('Loading…', type='ongoing')
-ui.notify('Saved!', group='save')   # `group` is forwarded to Quasar's Notify via **kwargs; identical groups merge with a counter
+ui.notify("Saved!", type="positive")
+ui.notify("Error!", type="negative", position="top")
+ui.notify("Warning", type="warning", close_button="Dismiss")
+ui.notify("Loading…", type="ongoing")
+ui.notify(
+    "Saved!", group="save"
+)  # `group` is forwarded to Quasar's Notify via **kwargs; identical groups merge with a counter
 
 # Persistent notification object
-n = ui.notification('Processing…', spinner=True)
+n = ui.notification("Processing…", spinner=True)
 # later:
-n.message = 'Done!'
+n.message = "Done!"
 n.spinner = False
-n.type = 'positive'
+n.type = "positive"
 n.dismiss()
 ```
 
@@ -818,17 +867,17 @@ Only use when no Python API exists:
 ui.run_javascript('document.title = "New Title"')
 
 # Run JS and await result
-result = await ui.run_javascript('return window.innerWidth')
+result = await ui.run_javascript("return window.innerWidth")
 
 # Call a method on a specific element's Vue component
-await element.run_method('methodName', arg1, arg2)
+await element.run_method("methodName", arg1, arg2)
 
 # Get a computed Vue prop
-value = await element.get_computed_prop('propName')
+value = await element.get_computed_prop("propName")
 
 # Add global CSS
-ui.add_css('body { font-family: monospace; }')
-ui.add_scss('$primary: blue; body { color: $primary; }')
+ui.add_css("body { font-family: monospace; }")
+ui.add_scss("$primary: blue; body { color: $primary; }")
 
 # Add raw HTML to <head> or <body> (last resort)
 ui.add_head_html('<link rel="preconnect" href="...">')
@@ -845,70 +894,76 @@ from nicegui import app, ui
 # Startup / shutdown hooks
 app.on_startup(async_function)
 app.on_shutdown(async_function)
-app.on_connect(handler)         # new client connects
-app.on_disconnect(handler)      # client disconnects
-app.on_exception(handler)       # unhandled exceptions (any context); per-page counterpart: ui.on_exception
+app.on_connect(handler)  # new client connects
+app.on_disconnect(handler)  # client disconnects
+app.on_exception(handler)  # unhandled exceptions (any context); per-page counterpart: ui.on_exception
 app.on_page_exception(handler)  # unhandled exceptions raised inside a @ui.page builder
-app.on_delete(handler)          # @ui.page client instance is being deleted (per-page teardown)
+app.on_delete(handler)  # @ui.page client instance is being deleted (per-page teardown)
+
 
 # Custom FastAPI routes alongside NiceGUI
-@app.get('/api/data')
+@app.get("/api/data")
 async def get_data():
-    return {'value': 42}
+    return {"value": 42}
+
 
 # Serve static / media files via NiceGUI's first-class helpers
 # (prefer these over app.mount(StaticFiles(...)) — they respect the URL prefix and per-request headers)
-app.add_static_files('/static', 'path/to/static_dir')   # whole directory
-app.add_static_file(local_file='path/to/file.png', url_path='/icon.png')
-app.add_media_files('/media', 'path/to/videos')         # streamable (Range-request support)
-app.add_media_file(local_file='path/to/clip.mp4', url_path='/clip.mp4')
+app.add_static_files("/static", "path/to/static_dir")  # whole directory
+app.add_static_file(local_file="path/to/file.png", url_path="/icon.png")
+app.add_media_files("/media", "path/to/videos")  # streamable (Range-request support)
+app.add_media_file(local_file="path/to/clip.mp4", url_path="/clip.mp4")
 
 # Middleware (FastAPI passthrough) — standard pattern for auth, CORS, request logging
 from starlette.middleware.base import BaseHTTPMiddleware
+
 app.add_middleware(BaseHTTPMiddleware, dispatch=auth_dispatch)
 
 # Run — most relevant flags (the values shown are examples; the default follows in the comment)
 ui.run(
-    host='0.0.0.0',                  # default: '0.0.0.0', or '127.0.0.1' in native mode
-    port=8080,                       # default: 8080, or an open port in native mode; set it here —
-                                     # NICEGUI_HOST/NICEGUI_PORT env vars are internal, ignored and warned about (since 3.17)
-    title='My App',                  # default: 'NiceGUI'; can be overwritten per page
-    favicon='🚀',                    # default: None (NiceGUI icon); emoji, local image path, http(s) URL, data URL or inline SVG
-    dark=None,                       # default: False; None = follow system
-    language='en-US',                # default: None (Quasar element language)
-    storage_secret='my-secret',      # default: None; required for app.storage.user and app.storage.browser
-    root=None,                       # default: None; root page function (since 3.0)
-    viewport='width=device-width, initial-scale=1',   # this is also the default
-    reload=True,                     # default: True; auto-reload on file change (dev only)
-    show=False,                      # default: True, i.e. the browser is opened automatically
-    reconnect_timeout=3.0,           # default: 3.0; grace period for a client to reconnect
-    binding_refresh_interval=0.1,    # default: 0.1; bindings pull-loop interval, raise to reduce CPU
-    tailwind=True,                   # default: True; disable to drop the Tailwind runtime
-    unocss=None,                     # default: None; 'mini'/'wind3'/'wind4' uses UnoCSS instead of Tailwind (since 3.7)
-    prod_js=True,                    # default: True; production-minified Vue/Quasar bundles
-    fastapi_docs=False,              # default: False; True exposes /docs, /redoc, /openapi.json
-    endpoint_documentation='none',   # default: 'none'; which routes those docs list ('internal'/'page'/'all')
-    markdown=False,                  # default: False; experimental: serve your own pages as Markdown to agents
-                                     # (Accept: text/markdown, or recognized agent UAs); override per page via @ui.page(markdown=...)
+    host="0.0.0.0",  # default: '0.0.0.0', or '127.0.0.1' in native mode
+    port=8080,  # default: 8080, or an open port in native mode; set it here —
+    # NICEGUI_HOST/NICEGUI_PORT env vars are internal, ignored and warned about (since 3.17)
+    title="My App",  # default: 'NiceGUI'; can be overwritten per page
+    favicon="🚀",  # default: None (NiceGUI icon); emoji, local image path, http(s) URL, data URL or inline SVG
+    dark=None,  # default: False; None = follow system
+    language="en-US",  # default: None (Quasar element language)
+    storage_secret="my-secret",  # default: None; required for app.storage.user and app.storage.browser
+    root=None,  # default: None; root page function (since 3.0)
+    viewport="width=device-width, initial-scale=1",  # this is also the default
+    reload=True,  # default: True; auto-reload on file change (dev only)
+    show=False,  # default: True, i.e. the browser is opened automatically
+    reconnect_timeout=3.0,  # default: 3.0; grace period for a client to reconnect
+    binding_refresh_interval=0.1,  # default: 0.1; bindings pull-loop interval, raise to reduce CPU
+    tailwind=True,  # default: True; disable to drop the Tailwind runtime
+    unocss=None,  # default: None; 'mini'/'wind3'/'wind4' uses UnoCSS instead of Tailwind (since 3.7)
+    prod_js=True,  # default: True; production-minified Vue/Quasar bundles
+    fastapi_docs=False,  # default: False; True exposes /docs, /redoc, /openapi.json
+    endpoint_documentation="none",  # default: 'none'; which routes those docs list ('internal'/'page'/'all')
+    markdown=False,  # default: False; experimental: serve your own pages as Markdown to agents
+    # (Accept: text/markdown, or recognized agent UAs); override per page via @ui.page(markdown=...)
     # Native desktop window (pywebview) — flagship offline mode:
-    native=False,                    # default: False; True opens a native window instead of a browser
-    window_size=(1024, 768),         # default: None; implies native=True
-    fullscreen=False,                # default: False; implies native=True
-    frameless=False,                 # default: False; implies native=True
+    native=False,  # default: False; True opens a native window instead of a browser
+    window_size=(1024, 768),  # default: None; implies native=True
+    fullscreen=False,  # default: False; implies native=True
+    frameless=False,  # default: False; implies native=True
     # Tech preview: temporary public URL without port-forwarding
-    on_air=None,                     # default: None; True for an anonymous tunnel, or a device token string
+    on_air=None,  # default: None; True for an anonymous tunnel, or a device token string
 )
 
 # Mount NiceGUI inside an existing FastAPI app instead of using ui.run()
 # (e.g. when NiceGUI is one piece of a larger API service)
 from fastapi import FastAPI
+
 fastapi_app = FastAPI()
 
-@ui.page('/admin')
-def admin():
-    ui.label('Admin UI')
 
-ui.run_with(fastapi_app, mount_path='/gui', storage_secret='…')
+@ui.page("/admin")
+def admin():
+    ui.label("Admin UI")
+
+
+ui.run_with(fastapi_app, mount_path="/gui", storage_secret="…")
 # `uvicorn module:fastapi_app` — NiceGUI is mounted at /gui, FastAPI routes coexist.
 ```
 
@@ -921,20 +976,22 @@ from nicegui import background_tasks
 
 # NEVER use asyncio.create_task() — the GC may cancel it
 # ALWAYS use background_tasks.create()
-background_tasks.create(my_coroutine(), name='my-task')
+background_tasks.create(my_coroutine(), name="my-task")
 
 # Run the task inside a page context (since 3.18): elements it creates go into `container`,
 # and exceptions reach the page's ui.on_exception handlers (not only the global app.on_exception)
-background_tasks.create(my_coroutine(), context=container)   # or context=ui.context.client
+background_tasks.create(my_coroutine(), context=container)  # or context=ui.context.client
+
 
 # Inside a @ui.page handler, run something after the page is built
 async def long_work():
     await asyncio.sleep(5)
-    label.set_text('Done')
+    label.set_text("Done")
 
-@ui.page('/')
+
+@ui.page("/")
 async def index():
-    label = ui.label('Working…')
+    label = ui.label("Working…")
     background_tasks.create(long_work())
 ```
 
@@ -956,7 +1013,7 @@ result = await run.cpu_bound(compute, data)
 
 # Optional: choose the multiprocessing start method for the cpu_bound pool (since 3.15).
 # Set it before ui.run(); None keeps the platform default, which will become 'spawn' in 4.0.
-run.process_pool_start_method = 'spawn'
+run.process_pool_start_method = "spawn"
 ```
 
 Both must be awaited from an async context and currently return `None` instead of the result when the call is cancelled or the app shuts down (NiceGUI 4.0 will raise `CancelledError` there instead).
@@ -1143,19 +1200,19 @@ for injecting custom content into specific areas:
 ```python
 # Table header slot
 table = ui.table(columns=columns, rows=rows)
-with table.add_slot('header'):
-    with table.add_slot('header-cell-name'):
-        ui.label('NAME').classes('font-bold')
+with table.add_slot("header"):
+    with table.add_slot("header-cell-name"):
+        ui.label("NAME").classes("font-bold")
 
 # Drawer toggle slot
 with ui.header():
-    with ui.button(icon='menu').props('flat'):
+    with ui.button(icon="menu").props("flat"):
         pass  # default
-    ui.label('My App')
+    ui.label("My App")
 
 # Dialog default slot is just 'with dialog:'
 with ui.dialog() as dialog:
-    ui.label('Content goes in default slot')
+    ui.label("Content goes in default slot")
 ```
 
 ---
@@ -1166,22 +1223,25 @@ Use `.mark()` to tag elements for testing and `ElementFilter`:
 
 ```python
 # Mark elements
-ui.button('Submit').mark('submit-btn')
-ui.input('Email').mark('email-input')
-ui.label().mark('result-label')
+ui.button("Submit").mark("submit-btn")
+ui.input("Email").mark("email-input")
+ui.label().mark("result-label")
+
 
 # In tests (User fixture):
 async def test_form(user: User):
-    await user.open('/')
-    await user.type('test@example.com', marker='email-input')
-    await user.click('submit-btn')
-    await user.should_see(marker='result-label')
+    await user.open("/")
+    await user.type("test@example.com", marker="email-input")
+    await user.click("submit-btn")
+    await user.should_see(marker="result-label")
+
 
 # ElementFilter in app code (for reducing global vars):
 from nicegui.element_filter import ElementFilter
-labels = ElementFilter(marker='result-label')
+
+labels = ElementFilter(marker="result-label")
 for label in labels:
-    label.set_text('Updated')
+    label.set_text("Updated")
 ```
 
 ---
@@ -1191,60 +1251,64 @@ for label in labels:
 ### Dynamic list
 
 ```python
-names = ['Alice', 'Bob']
+names = ["Alice", "Bob"]
+
 
 @ui.refreshable
 def name_list():
     for name in names:
-        with ui.row().classes('items-center'):
+        with ui.row().classes("items-center"):
             ui.label(name)
-            ui.button(icon='delete', on_click=lambda n=name: remove(n)).props('flat dense')
+            ui.button(icon="delete", on_click=lambda n=name: remove(n)).props("flat dense")
+
 
 def remove(name):
     names.remove(name)
     name_list.refresh()
 
+
 name_list()
-ui.button('Add', on_click=lambda: (names.append('New'), name_list.refresh()))
+ui.button("Add", on_click=lambda: (names.append("New"), name_list.refresh()))
 ```
 
 ### Reactive form with validation
 
 ```python
-ui.input('Email', validation={'Must contain @': lambda v: '@' in v})
-ui.number('Age', min=0, max=150, validation={'Too young': lambda v: v >= 18})
+ui.input("Email", validation={"Must contain @": lambda v: "@" in v})
+ui.number("Age", min=0, max=150, validation={"Too young": lambda v: v >= 18})
 ```
 
 ### Async data loading
 
 ```python
-@ui.page('/')
+@ui.page("/")
 async def index():
     spinner = ui.spinner()
+
     async def load():
         data = await fetch_data()
         spinner.delete()
         ui.label(str(data))
+
     background_tasks.create(load())
 ```
 
 ### Card grid layout
 
 ```python
-with ui.grid(columns=3).classes('w-full gap-4'):
+with ui.grid(columns=3).classes("w-full gap-4"):
     for item in items:
-        with ui.card().classes('cursor-pointer hover:shadow-lg') \
-                .on('click', lambda i=item: select(i)):
-            ui.image(item.image).classes('w-full')
-            ui.label(item.title).classes('font-bold')
-            ui.label(item.description).classes('text-sm text-grey')
+        with ui.card().classes("cursor-pointer hover:shadow-lg").on("click", lambda i=item: select(i)):
+            ui.image(item.image).classes("w-full")
+            ui.label(item.title).classes("font-bold")
+            ui.label(item.description).classes("text-sm text-grey")
 ```
 
 ### Bind label to slider value
 
 ```python
 slider = ui.slider(min=0, max=100, value=50)
-ui.label().bind_text_from(slider, 'value', backward=lambda v: f'Value: {v}')
+ui.label().bind_text_from(slider, "value", backward=lambda v: f"Value: {v}")
 ```
 
 ---
@@ -1255,7 +1319,7 @@ ui.label().bind_text_from(slider, 'value', backward=lambda v: f'Value: {v}')
 # BAD: raw JS for styling
 ui.run_javascript("document.querySelector('.my-class').style.color = 'red'")
 # GOOD:
-ui.query('.my-class').style('color: red')
+ui.query(".my-class").style("color: red")
 
 # BAD: asyncio.create_task() or asyncio.ensure_future() — bare task references
 #      may be GC-cancelled, and exceptions are silently swallowed unless awaited
@@ -1267,51 +1331,57 @@ background_tasks.create(my_coro())
 # BAD: run_javascript for clipboard
 await ui.run_javascript("navigator.clipboard.writeText('https://example.com')")
 # GOOD:
-await ui.clipboard.write('https://example.com')
+await ui.clipboard.write("https://example.com")
 
 # BAD: raw HTML for a styled download link
 ui.html('<a href="/download" style="color: white; background: green; padding: 8px">Download</a>')
 # GOOD: ui.button with tag=a renders as an <a> element with full Quasar styling
-ui.button('Download', icon='download') \
-    .props('href=/download tag=a unelevated color=primary')
+ui.button("Download", icon="download").props("href=/download tag=a unelevated color=primary")
+
 
 # BAD: blocking I/O in async handler
 async def on_click():
     data = requests.get(url).json()  # blocks the event loop!
+
+
 # GOOD: an async client, …
 async def on_click():
     async with httpx.AsyncClient() as client:
         data = (await client.get(url)).json()
+
+
 # … or the blocking call wrapped in a thread
 async def on_click():
     data = (await run.io_bound(requests.get, url)).json()
 
+
 # BAD: rebuilding entire page on every change
-@ui.page('/')
-def index():
-    ...  # all dynamic content here, triggers full reload
+@ui.page("/")
+def index(): ...  # all dynamic content here, triggers full reload
+
+
 # GOOD: use @ui.refreshable for the dynamic sections only
 
 # BAD: inline style for something Tailwind/Quasar already provides
-ui.label('Big').style('font-size: 1.5rem; font-weight: bold')
+ui.label("Big").style("font-size: 1.5rem; font-weight: bold")
 # GOOD:
-ui.label('Big').classes('text-2xl font-bold')
+ui.label("Big").classes("text-2xl font-bold")
 
 # BAD: add_head_html for page background
-ui.add_head_html('<style>body { background: #f0f0f0 }</style>')
+ui.add_head_html("<style>body { background: #f0f0f0 }</style>")
 # GOOD:
-ui.query('body').classes('bg-grey-2')
+ui.query("body").classes("bg-grey-2")
 
 # BAD: passing Quasar-specific values to .style()
-ui.button().style('background-color: var(--q-primary)')
+ui.button().style("background-color: var(--q-primary)")
 # GOOD: let NiceGUI handle Quasar theme
-ui.button(color='primary')
+ui.button(color="primary")
 
 # BAD: configuring host/port via NICEGUI_* environment variables — they are internal to NiceGUI,
 #      ui.run() overwrites them and (since 3.17) logs a warning; the app serves on port= (default 8080)
-os.environ['NICEGUI_PORT'] = '8113'   # or: NICEGUI_PORT=8113 python main.py
+os.environ["NICEGUI_PORT"] = "8113"  # or: NICEGUI_PORT=8113 python main.py
 # GOOD: read your own variable and pass it explicitly
-ui.run(port=int(os.environ.get('PORT', 8080)))
+ui.run(port=int(os.environ.get("PORT", 8080)))
 ```
 
 ---
@@ -1322,9 +1392,9 @@ Prefer `User` fixture (no browser, fast, same async context):
 
 ```python
 async def test_counter(user: User) -> None:
-    await user.open('/')
-    await user.click('Increment')
-    await user.should_see('Count: 1')
+    await user.open("/")
+    await user.click("Increment")
+    await user.should_see("Count: 1")
 ```
 
 `user.should_see(...)`, `user.should_not_see(...)` and `user.find(...)` always search the whole page (including header, drawers and footer).
@@ -1333,17 +1403,17 @@ Values that are not shown as text (sliders, checkboxes, hidden progress values) 
 When markers or content repeat across the page, limit them to one subtree with `user.scope(...)` (since 3.16):
 
 ```python
-with user.scope(marker='left-card'):  # same filter args as user.find(), must match exactly one element
-    await user.should_see('Apple')
-    user.find('Buy').click()
+with user.scope(marker="left-card"):  # same filter args as user.find(), must match exactly one element
+    await user.should_see("Apple")
+    user.find("Buy").click()
 ```
 
 Use `Screen` fixture only when JavaScript or real browser rendering is required:
 
 ```python
 def test_chart(screen: Screen) -> None:
-    screen.open('/')
-    screen.should_contain('canvas')  # chart rendered
+    screen.open("/")
+    screen.should_contain("canvas")  # chart rendered
 ```
 
 ---
@@ -1378,23 +1448,26 @@ my_app/
 from nicegui import app, ui
 from pages import dashboard, settings  # imports trigger @ui.page registration
 
-@ui.page('/')
-def index():
-    ui.navigate.to('/dashboard')
 
-ui.run(storage_secret='my-secret', title='My App')
+@ui.page("/")
+def index():
+    ui.navigate.to("/dashboard")
+
+
+ui.run(storage_secret="my-secret", title="My App")
 ```
 
 ```python
 # pages/dashboard.py
 from nicegui import ui
 
-@ui.page('/dashboard')
+
+@ui.page("/dashboard")
 def dashboard():
     with ui.header():
-        ui.label('Dashboard').classes('text-xl font-bold')
-    with ui.column().classes('p-4'):
-        ui.label('Welcome!')
+        ui.label("Dashboard").classes("text-xl font-bold")
+    with ui.column().classes("p-4"):
+        ui.label("Welcome!")
 ```
 
 ---
@@ -1418,12 +1491,14 @@ These follow NiceGUI project conventions and work well for NiceGUI-based apps:
 ```python
 # NEVER block the event loop
 import time
-time.sleep(5)             # blocks everything — never do this in async context
-requests.get(url)         # synchronous HTTP — use httpx, or await run.io_bound(requests.get, url)
+
+time.sleep(5)  # blocks everything — never do this in async context
+requests.get(url)  # synchronous HTTP — use httpx, or await run.io_bound(requests.get, url)
 
 # ALWAYS use background_tasks for fire-and-forget coroutines
 from nicegui import background_tasks
-background_tasks.create(my_coroutine(), name='descriptive-name')
+
+background_tasks.create(my_coroutine(), name="descriptive-name")
 
 # Exceptions in background tasks reach app.on_exception automatically;
 # pass context= so the page's ui.on_exception handlers see them too (since 3.18)
@@ -1435,10 +1510,7 @@ background_tasks.create(do_work(), context=ui.context.client)
 When chaining methods, use backslash continuation:
 
 ```python
-ui.button('Click me') \
-    .classes('bg-green text-white') \
-    .props('rounded') \
-    .on('click', handler)
+ui.button("Click me").classes("bg-green text-white").props("rounded").on("click", handler)
 ```
 
 ---

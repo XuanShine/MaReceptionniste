@@ -18,7 +18,7 @@ def main(reload: bool = False) -> None:
     ui.run(
         title="Ma Réceptionniste",
         language="fr",
-        host=os.environ.get("HOST", "127.0.0.1"),
+        host=os.environ.get("HOST", "0.0.0.0"),
         port=int(os.environ.get("PORT", "8080")),
         storage_secret=os.environ.get("STORAGE_SECRET", "dev-secret-a-changer-en-production"),
         reload=reload,

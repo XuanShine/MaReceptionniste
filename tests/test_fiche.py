@@ -16,6 +16,7 @@ from ma_receptionniste.dossier import (
     enregistrer_dossier,
     etat_affiche,
     euros,
+    lire_date,
     lire_montant,
     nombre_nuits,
     synthese,
@@ -257,6 +258,28 @@ def test_consommations_et_reglements_entrent_dans_le_reste() -> None:
     assert compte.consommations == Decimal("12.00")
     assert compte.regle == Decimal("50.00")
     assert compte.reste == Decimal("66.00")
+
+
+def test_deux_petits_dejeuners_a_quinze_euros_valent_trente() -> None:
+    conso = Consommation(
+        reservation_id=1,
+        libelle="Petit-déjeuner",
+        quantite=2,
+        montant=Decimal("15"),
+        jour=NUIT_18,
+    )
+
+    compte = synthese([], [conso], [])
+
+    assert compte.consommations == Decimal("30.00")
+    assert compte.reste == Decimal("30.00")
+
+
+def test_une_date_francaise_se_relit_et_un_masque_vide_non() -> None:
+    assert lire_date("18/10/2026") == date(2026, 10, 18)
+    assert lire_date("2026-10-18") == date(2026, 10, 18)
+    assert lire_date("__/__/____") is None
+    assert lire_date("32/13/2026") is None
 
 
 def test_enregistrer_le_dossier_se_relit_comme_la_fiche(session: Session) -> None:

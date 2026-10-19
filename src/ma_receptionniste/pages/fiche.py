@@ -1,6 +1,7 @@
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 from nicegui import app, run, ui
 from sqlalchemy.exc import IntegrityError
@@ -12,7 +13,9 @@ from ma_receptionniste.dossier import (
     compte_fiche,
     euros,
     jour_fr,
+    lire_date,
     lire_montant,
+    montant_ligne,
     nombre_nuits,
     pourcent,
 )
@@ -37,20 +40,6 @@ ETATS = {
 MODES = ["CB", "Espèces", "Virement", "Prépayé", "Autre"]
 DENSE = "dense outlined hide-bottom-space"
 MASQUE_DATE = f'{DENSE} mask="##/##/####"'
-
-
-def _lire_date(valeur: object) -> date | None:
-    if not isinstance(valeur, str):
-        return None
-    texte = valeur.strip()
-    if not texte or set(texte) <= set("_/ "):
-        return None
-    for forme in ("%d/%m/%Y", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(texte, forme).date()
-        except ValueError:
-            continue
-    return None
 
 
 def _afficher_date(valeur: date | None) -> str:
@@ -197,7 +186,7 @@ async def _dossier(reservation_id: int, detail: dict, chambres: dict, clients: l
     client_id.on_value_change(charger_client)
 
     def saisi() -> DossierSaisi:
-        facture = _lire_date(date_facture.value)
+        facture = lire_date(date_facture.value)
         if date_facture.value and facture is None:
             raise DossierInvalide("Date de facture illisible")
         if client_id.value is None:
@@ -257,8 +246,8 @@ async def _dossier(reservation_id: int, detail: dict, chambres: dict, clients: l
                 if edit_id["id"] is None or edit_chambre.value is None:
                     ui.notify("Chambre obligatoire", type="warning")
                     return
-                debut = _lire_date(edit_debut.value)
-                fin = _lire_date(edit_fin.value)
+                debut = lire_date(edit_debut.value)
+                fin = lire_date(edit_fin.value)
                 if debut is None or fin is None:
                     ui.notify("Chambre et dates obligatoires", type="warning")
                     return
@@ -351,7 +340,7 @@ async def _dossier(reservation_id: int, detail: dict, chambres: dict, clients: l
                             {
                                 "libelle": ligne["libelle"],
                                 "quantite": ligne["quantite"],
-                                "montant": euros(ligne["montant"]),
+                                "montant": euros(montant_ligne(SimpleNamespace(**ligne))),
                                 "jour": jour_fr(ligne["jour"]),
                             }
                             for ligne in fiche_detail["consommations"]
@@ -444,8 +433,8 @@ async def _dossier(reservation_id: int, detail: dict, chambres: dict, clients: l
                 taxe = ui.input("Taxe de séjour").props(DENSE).classes("w-28")
 
             def maj_nuits() -> None:
-                debut = _lire_date(arrivee.value)
-                fin = _lire_date(depart.value)
+                debut = lire_date(arrivee.value)
+                fin = lire_date(depart.value)
                 nuits.set_text(str(nombre_nuits(debut, fin)) if debut and fin and fin > debut else "—")
 
             arrivee.on_value_change(maj_nuits)
@@ -455,8 +444,8 @@ async def _dossier(reservation_id: int, detail: dict, chambres: dict, clients: l
                 ui.button("Fermer", on_click=lambda: _ouvrir_ajout(False)).props("flat no-caps dense")
 
         async def poser_ligne() -> None:
-            debut = _lire_date(arrivee.value)
-            fin = _lire_date(depart.value)
+            debut = lire_date(arrivee.value)
+            fin = lire_date(depart.value)
             if chambre.value is None or debut is None or fin is None:
                 ui.notify("Chambre et dates obligatoires", type="warning")
                 return
@@ -496,7 +485,7 @@ async def _dossier(reservation_id: int, detail: dict, chambres: dict, clients: l
         with ui.row().classes("items-end gap-2"):
             libelle = ui.input("Libellé").props(DENSE).classes("w-48")
             quantite = ui.number("Qté", value=1, min=1, precision=0).props(DENSE).classes("w-20")
-            montant = ui.input("Montant").props(DENSE).classes("w-28")
+            montant = ui.input("Prix unitaire").props(DENSE).classes("w-28")
             jour = _date_courte("Date", aujourd_hui)
 
             async def ajouter() -> None:
@@ -508,7 +497,7 @@ async def _dossier(reservation_id: int, detail: dict, chambres: dict, clients: l
                 if valeur is None:
                     ui.notify("Le montant est obligatoire", type="warning")
                     return
-                quand = _lire_date(jour.value)
+                quand = lire_date(jour.value)
                 if quand is None:
                     ui.notify("Date obligatoire", type="warning")
                     return
@@ -545,7 +534,7 @@ async def _dossier(reservation_id: int, detail: dict, chambres: dict, clients: l
                 if valeur is None:
                     ui.notify("Le montant est obligatoire", type="warning")
                     return
-                quand = _lire_date(jour.value)
+                quand = lire_date(jour.value)
                 if quand is None:
                     ui.notify("Date obligatoire", type="warning")
                     return
@@ -623,7 +612,7 @@ async def _dossier(reservation_id: int, detail: dict, chambres: dict, clients: l
         ui.notify("Réservation confirmée", type="positive")
 
     async def facturer() -> None:
-        if not _lire_date(date_facture.value):
+        if not lire_date(date_facture.value):
             date_facture.set_value(_afficher_date(aujourd_hui))
         if not await sauver():
             return

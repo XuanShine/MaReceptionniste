@@ -95,6 +95,13 @@ def prix_apres_remise(prix: Decimal | None, remise: Decimal | None) -> Decimal:
     return (Decimal(prix) * (Decimal("1") - taux / Decimal("100"))).quantize(_CENTIME)
 
 
+def montant_ligne(ligne) -> Decimal:
+    quantite = getattr(ligne, "quantite", 1)
+    if not quantite:
+        quantite = 1
+    return (_argent(ligne.montant) * Decimal(quantite)).quantize(_CENTIME)
+
+
 def synthese(
     sejours: list[Sejour],
     consommations: list[Consommation],
@@ -102,7 +109,7 @@ def synthese(
 ) -> Compte:
     ttc = sum((prix_apres_remise(sejour.prix_ttc, sejour.remise_pct) for sejour in sejours), Decimal("0.00"))
     taxe = sum((_argent(sejour.taxe_sejour) for sejour in sejours), Decimal("0.00"))
-    extras = sum((_argent(ligne.montant) for ligne in consommations), Decimal("0.00"))
+    extras = sum((montant_ligne(ligne) for ligne in consommations), Decimal("0.00"))
     regle = sum((_argent(ligne.montant) for ligne in reglements), Decimal("0.00"))
     return Compte(
         ttc=ttc,
@@ -123,9 +130,26 @@ def compte_fiche(sejours: list[dict], consommations: list[dict], reglements: lis
             )
             for ligne in sejours
         ],
-        [SimpleNamespace(montant=ligne["montant"]) for ligne in consommations],
+        [
+            SimpleNamespace(montant=ligne["montant"], quantite=ligne.get("quantite", 1))
+            for ligne in consommations
+        ],
         [SimpleNamespace(montant=ligne["montant"]) for ligne in reglements],
     )
+
+
+def lire_date(valeur: object) -> date | None:
+    if not isinstance(valeur, str):
+        return None
+    texte = valeur.strip()
+    if not texte or set(texte) <= set("_/ "):
+        return None
+    for forme in ("%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(texte, forme).date()
+        except ValueError:
+            continue
+    return None
 
 
 def jour_fr(valeur: date | None) -> str:

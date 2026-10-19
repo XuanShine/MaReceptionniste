@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 
 from nicegui import app, ui
 
@@ -58,6 +58,15 @@ def appliquer_theme() -> None:
 
 def date_courte(jour: date | None) -> str:
     return jour.strftime("%d/%m/%Y") if jour else ""
+
+
+def heure_locale(moment: datetime) -> datetime:
+    """SQLite rend les horodatages sans fuseau, et l'application les écrit en UTC."""
+    return (moment if moment.tzinfo else moment.replace(tzinfo=UTC)).astimezone()
+
+
+def date_heure(moment: datetime) -> str:
+    return f"{heure_locale(moment):%d/%m/%Y %H:%M}"
 
 
 def date_longue(jour: date) -> str:

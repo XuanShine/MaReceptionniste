@@ -17,7 +17,6 @@ from ma_receptionniste.models import (
     Reservation,
     Sejour,
     StatutReservation,
-    User,
 )
 
 ETAT_LABEL = {
@@ -357,63 +356,3 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
             },
             "totaux": totaux(sejours, consommations, reglements),
         }
-
-
-STATUT_LABEL = {
-    StatutReservation.confirmee: "Confirmée",
-    StatutReservation.annulee: "Annulée",
-}
-
-
-def _statut_label(valeur: StatutReservation | str) -> str:
-    cle = str(valeur)
-    return STATUT_LABEL.get(StatutReservation(cle), cle)
-
-
-def _sejour_dict(sejour: Sejour, chambre_nom: str) -> dict:
-    return {
-        "id": sejour.id,
-        "chambre_id": sejour.chambre_id,
-        "chambre_nom": chambre_nom,
-        "date_debut": sejour.date_debut,
-        "date_fin": sejour.date_fin,
-        "nom_client": sejour.nom_client,
-    }
-
-
-def _note_dict(note: Historique, auteur: str | None) -> dict:
-    return {
-        "id": note.id,
-        "description": note.description,
-        "date": note.date,
-        "auteur": auteur,
-    }
-
-
-def detail_reservation(reservation_id: int) -> dict | None:
-    with get_session() as session:
-        reservation = session.get(Reservation, reservation_id)
-        if reservation is None:
-            return None
-        client = session.get(Client, reservation.client_id)
-        sejours = session.exec(
-            select(Sejour).where(Sejour.reservation_id == reservation.id).order_by(Sejour.date_debut)
-        ).all()
-        notes = session.exec(
-            select(Historique).where(Historique.reservation_id == reservation.id).order_by(Historique.date.desc())
-        ).all()
-        return {
-            "id": reservation.id,
-            "client": _nom_client(client.prenom, client.nom) if client else "Client inconnu",
-            "statut": str(reservation.statut),
-            "statut_label": _statut_label(reservation.statut),
-            "sejours": [_sejour_dict(sejour, session.get(Chambre, sejour.chambre_id).nom) for sejour in sejours],
-            "notes": [_note_dict(note, _auteur(session, note.user_id)) for note in notes],
-        }
-
-
-def _auteur(session: Session, user_id: int | None) -> str | None:
-    if user_id is None:
-        return None
-    user = session.get(User, user_id)
-    return user.nom if user else None

@@ -4,6 +4,17 @@ from ma_receptionniste.consultations import lister_clients
 from ma_receptionniste.pages.layout import etat_vide, page
 from ma_receptionniste.saisie import creer_client
 
+PAYS_COURANTS = [
+    "France",
+    "Belgique",
+    "Suisse",
+    "Allemagne",
+    "Italie",
+    "Espagne",
+    "Royaume-Uni",
+    "Pays-Bas",
+    "États-Unis",
+]
 COLONNES = [
     {"name": "nom", "label": "Nom", "field": "nom", "align": "left", "sortable": True},
     {"name": "prenom", "label": "Prénom", "field": "prenom", "align": "left", "sortable": True},
@@ -51,7 +62,7 @@ async def clients() -> None:
             with ui.grid(columns=4).classes("w-full gap-3"):
                 nom = ui.input("Nom *")
                 prenom = ui.input("Prénom")
-                pays = ui.input("Pays de nationalité", autocomplete=["France", "Italie", "Allemagne", "Royaume-Uni"])
+                pays = ui.input("Pays de nationalité", autocomplete=PAYS_COURANTS)
                 telephone = ui.input("Téléphone")
                 email = ui.input("Email")
                 adresse = ui.input("Adresse").classes("col-span-2")

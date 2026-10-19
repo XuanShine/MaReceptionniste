@@ -2,7 +2,7 @@ from nicegui import run, ui
 from sqlalchemy.exc import IntegrityError
 
 from ma_receptionniste.consultations import lister_chambres
-from ma_receptionniste.pages.layout import etat_vide, page
+from ma_receptionniste.pages.layout import badge, etat_vide, page
 from ma_receptionniste.saisie import basculer_etat, creer_chambre, modifier_type_chambre
 
 TYPES_COURANTS = ["Single BB", "Double", "Twin", "Triple", "Familiale", "Suite"]
@@ -48,11 +48,8 @@ async def chambres() -> None:
             ui.notify(f"Type de la chambre {chambre['nom']} enregistré", type="positive")
 
         type_chambre.on("blur", enregistrer_type).on("keydown.enter", enregistrer_type)
-        couleur = "positive" if prete else "warning"
         with ui.element("div").classes(cellule):
-            ui.badge(chambre["etat_label"]).props(f"color={couleur}-soft text-color={couleur}").classes(
-                "px-2 py-1 font-medium"
-            )
+            badge(chambre["etat_label"], "positive" if prete else "warning")
 
         async def basculer() -> None:
             await run.io_bound(basculer_etat, chambre["id"])

@@ -2,13 +2,16 @@ import os
 
 from nicegui import app, ui
 
-from ma_receptionniste import pages  # noqa: F401
 from ma_receptionniste.auth import AuthMiddleware
 from ma_receptionniste.db import create_db_and_tables
-from ma_receptionniste.pages.theme import appliquer_theme
 
 
 def main(reload: bool = False) -> None:
+    # Importer les pages enregistre leurs routes. Le faire ici, et non à l'import du paquet,
+    # laisse la simulation de test de NiceGUI les réenregistrer après avoir vidé le routeur.
+    from ma_receptionniste import pages  # noqa: F401
+    from ma_receptionniste.pages.theme import appliquer_theme
+
     appliquer_theme()
     app.on_startup(create_db_and_tables)
     app.add_middleware(AuthMiddleware)

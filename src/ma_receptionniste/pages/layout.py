@@ -33,6 +33,10 @@ def page(actif: str, titre: str) -> Iterator[None]:
         yield
 
 
+def badge(libelle: str, couleur: str) -> None:
+    ui.badge(libelle).props(f"color={couleur}-soft text-color={couleur}").classes("px-2 py-1 font-medium")
+
+
 def etat_vide(icone: str, phrase: str, action: str | None = None, cible: str | None = None) -> None:
     with ui.column().classes("w-full items-center gap-2 py-10 text-ardoise"):
         ui.icon(icone, size="2.5rem").classes("text-slate-300")

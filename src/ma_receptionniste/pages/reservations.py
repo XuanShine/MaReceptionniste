@@ -3,7 +3,13 @@ from datetime import date, timedelta
 from nicegui import app, run, ui
 from sqlalchemy.exc import IntegrityError
 
-from ma_receptionniste.consultations import detail_reservation, lister_reservations, options_chambres, options_clients
+from ma_receptionniste.consultations import (
+    STATUT_SEJOUR,
+    detail_reservation,
+    lister_reservations,
+    options_chambres,
+    options_clients,
+)
 from ma_receptionniste.pages.layout import header
 from ma_receptionniste.saisie import ajouter_note, ajouter_sejour, annuler_reservation, creer_reservation
 from ma_receptionniste.sejours import ChambreOccupee, SejourInvalide
@@ -43,17 +49,12 @@ async def reservations() -> None:
             return
         for row in rows:
             with ui.card().classes("w-full"):
-                titre = f"{row['client']} — {row['statut_label']}"
+                titre = f"{row['client']} — {STATUT_SEJOUR[row['statut']].libelle}"
                 ui.link(titre, f"/reservations/{row['id']}").classes("text-lg")
-                if not row["sejours"]:
+                if not row["chambres"]:
                     ui.label("Aucun séjour").classes("text-grey")
                     continue
-                for sejour in row["sejours"]:
-                    nom = f" ({sejour['nom_client']})" if sejour["nom_client"] else ""
-                    ui.label(
-                        f"{sejour['chambre_nom']} · {_afficher_date(sejour['date_debut'])}"
-                        f" → {_afficher_date(sejour['date_fin'])}{nom}"
-                    )
+                ui.label(f"{row['chambres']} · {_afficher_date(row['date_debut'])} → {_afficher_date(row['date_fin'])}")
 
     with ui.column().classes("w-full max-w-3xl mx-auto p-4 gap-4"):
         ui.label("Réservations").classes("text-2xl font-bold")

@@ -1,13 +1,7 @@
-"""Règles de la fiche séjour : état affiché, compte, et écriture du dossier.
-
-Le statut confirmee / annulee reste le seul interrupteur d'occupation.
-L'état de dossier (En cours, Option, Parti) est ce que la réceptionniste lit
-dans le champ Statut, à côté de la case Traité.
-"""
-
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from types import SimpleNamespace
 from typing import Any
 
 from sqlmodel import Session, select
@@ -28,7 +22,7 @@ _CENTIME = Decimal("0.01")
 
 
 class DossierInvalide(ValueError):
-    """Un champ de la fiche ne peut pas être enregistré tel quel."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -83,7 +77,6 @@ def nombre_nuits(debut: date, fin: date) -> int:
 
 
 def lire_montant(valeur: object) -> Decimal | None:
-    """None si le champ est vide. DossierInvalide si le texte n'est pas un montant."""
     if valeur is None:
         return None
     texte = str(valeur).strip().replace(" ", "").replace(",", ".")
@@ -118,6 +111,27 @@ def synthese(
         regle=regle,
         reste=(ttc + taxe + extras - regle).quantize(_CENTIME),
     )
+
+
+def compte_fiche(sejours: list[dict], consommations: list[dict], reglements: list[dict]) -> Compte:
+    return synthese(
+        [
+            SimpleNamespace(
+                prix_ttc=ligne["prix_ttc"],
+                remise_pct=ligne["remise_pct"],
+                taxe_sejour=ligne["taxe_sejour"],
+            )
+            for ligne in sejours
+        ],
+        [SimpleNamespace(montant=ligne["montant"]) for ligne in consommations],
+        [SimpleNamespace(montant=ligne["montant"]) for ligne in reglements],
+    )
+
+
+def jour_fr(valeur: date | None) -> str:
+    if valeur is None:
+        return ""
+    return valeur.strftime("%d/%m/%Y")
 
 
 def euros(montant: Decimal | None) -> str:

@@ -76,7 +76,7 @@ def _etat(valeur: EtatChambre | str) -> str:
 def planning(session: Session, debut: date, fin: date) -> dict:
     chambres = session.exec(select(Chambre).order_by(Chambre.position, Chambre.nom)).all()
     lignes = session.exec(
-        select(Sejour, Client)
+        select(Sejour, Reservation, Client)
         .join(Reservation, Reservation.id == Sejour.reservation_id)
         .join(Client, Client.id == Reservation.client_id)
         .where(Reservation.statut != StatutReservation.annulee)
@@ -85,7 +85,7 @@ def planning(session: Session, debut: date, fin: date) -> dict:
         .order_by(Sejour.date_debut)
     ).all()
     sejours = []
-    for sejour, client in lignes:
+    for sejour, reservation, client in lignes:
         sejours.append(
             {
                 "id": sejour.id,
@@ -93,7 +93,7 @@ def planning(session: Session, debut: date, fin: date) -> dict:
                 "reservation_id": sejour.reservation_id,
                 "date_debut": sejour.date_debut,
                 "date_fin": sejour.date_fin,
-                "nom": sejour.nom_client or _nom_client(client.prenom, client.nom),
+                "nom": sejour.nom_client or reservation.nom_occupant or _nom_client(client.prenom, client.nom),
                 "nuits": nuits_entre(sejour.date_debut, sejour.date_fin, debut, fin),
             }
         )

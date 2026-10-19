@@ -20,8 +20,6 @@ class StatutReservation(StrEnum):
 
 
 class EtatDossier(StrEnum):
-    """Ce que la fiche affiche à côté de « Traité ». Distinct du statut qui libère la chambre."""
-
     en_cours = "en_cours"
     option = "option"
     parti = "parti"

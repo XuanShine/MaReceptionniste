@@ -23,8 +23,6 @@ def _activer_cles_etrangeres(dbapi_connection, _) -> None:
         cursor.close()
 
 
-# create_all ne réécrit pas une table déjà créée. Le PC de réception a un sqlite
-# rempli : on ajoute les colonnes manquantes, on ne recrée rien.
 COLONNES_AJOUTEES = {
     "client": {
         "pays": "VARCHAR",

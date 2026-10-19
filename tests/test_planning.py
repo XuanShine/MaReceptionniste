@@ -71,3 +71,20 @@ def test_planning_compte_les_nuits_et_ignore_les_annulees(session: Session) -> N
     assert [bloc["longueur"] for bloc in blocs] == [2, 1]
     assert blocs[0]["sejour"]["reservation_id"] == confirmee.id
     assert blocs[1]["sejour"] is None
+
+
+def test_le_planning_affiche_l_occupant_plutot_que_le_compte(session: Session) -> None:
+    client = Client(nom="CLIENT PASSAGE")
+    chambre = Chambre(nom="406", position=1)
+    session.add(client)
+    session.add(chambre)
+    session.commit()
+    reservation = Reservation(client_id=client.id, nom_occupant="LE CLOEREC Benedicte")
+    session.add(reservation)
+    session.commit()
+    session.add(Sejour(reservation_id=reservation.id, chambre_id=chambre.id, date_debut=NUIT_10, date_fin=DEPART_12))
+    session.commit()
+
+    data = planning(session, NUIT_10, date(2026, 10, 13))
+
+    assert data["sejours"][0]["nom"] == "LE CLOEREC Benedicte"

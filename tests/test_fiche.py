@@ -1,9 +1,3 @@
-"""Fiche séjour : champs ajoutés, compte, et base déjà remplie.
-
-Une base créée avant ces colonnes doit garder ses clients et ses nuits.
-Le statut annulee reste le seul qui libère la chambre.
-"""
-
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -18,6 +12,7 @@ from ma_receptionniste.dossier import (
     DossierSaisi,
     ajouter_consommation,
     appliquer_etat_dossier,
+    compte_fiche,
     enregistrer_dossier,
     etat_affiche,
     euros,
@@ -300,6 +295,10 @@ def test_enregistrer_le_dossier_se_relit_comme_la_fiche(session: Session) -> Non
     assert fiche["sejours"][0]["chambre_nom"] == "406"
     assert Decimal(fiche["sejours"][0]["prix_ttc"]) == Decimal("137.64")
     assert Decimal(fiche["sejours"][0]["taxe_sejour"]) == Decimal("4.00")
+    compte = compte_fiche(fiche["sejours"], fiche["consommations"], fiche["reglements"])
+    assert compte.ttc == Decimal("137.64")
+    assert compte.taxe == Decimal("4.00")
+    assert compte.reste == Decimal("141.64")
 
 
 def test_annuler_libere_la_chambre_et_reprendre_la_refuse_si_elle_est_reprise(session: Session) -> None:

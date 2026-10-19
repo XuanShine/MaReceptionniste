@@ -2,30 +2,37 @@ from nicegui import run, ui
 from sqlalchemy.exc import IntegrityError
 
 from ma_receptionniste.consultations import lister_chambres
-from ma_receptionniste.pages.layout import header
+from ma_receptionniste.pages.layout import cadre, titre
 from ma_receptionniste.saisie import basculer_etat, creer_chambre
 
 
 @ui.page("/chambres")
 async def chambres() -> None:
-    header("/chambres")
-
     @ui.refreshable
     async def liste() -> None:
         rows = await run.io_bound(lister_chambres)
-        if not rows:
-            ui.label("Aucune chambre")
-            return
-        for row in rows:
-            with ui.row().classes("w-full items-center justify-between border-b py-2"):
-                ui.label(f"{row['position']} — {row['nom']}").classes("text-lg")
-                ui.badge(row["etat_label"], color="positive" if row["etat"] == "pret" else "warning")
+        with ui.column().classes("feuille w-full gap-0 px-3"):
+            with ui.row().classes("w-full items-center py-2 text-xs texte-discret"):
+                ui.label("Position").classes("w-16")
+                ui.label("Chambre").classes("flex-1")
+                ui.label("État").classes("w-28")
+                ui.label("").classes("w-36")
+            if not rows:
+                ui.label("Aucune chambre").classes("py-3 texte-discret")
+                return
+            for row in rows:
+                with ui.row().classes("w-full items-center py-2").style("border-top: 1px solid #e6dfd2"):
+                    ui.label(str(row["position"])).classes("w-16 texte-discret")
+                    ui.label(row["nom"]).classes("flex-1 font-medium")
+                    couleur = "#2c6b4a" if row["etat"] == "pret" else "#9a6230"
+                    ui.label(row["etat_label"]).classes("w-28 text-sm").style(f"color:{couleur}")
 
-                async def changer(chambre_id: int = row["id"]) -> None:
-                    await run.io_bound(basculer_etat, chambre_id)
-                    await liste.refresh()
+                    async def changer(chambre_id: int = row["id"]) -> None:
+                        await run.io_bound(basculer_etat, chambre_id)
+                        await liste.refresh()
 
-                ui.button("Changer l'état", on_click=changer).props("outline")
+                    libelle = "Marquer à faire" if row["etat"] == "pret" else "Marquer prête"
+                    ui.button(libelle, on_click=changer).props("outline no-caps dense").classes("w-36")
 
     async def ajouter() -> None:
         if not (nom.value or "").strip():
@@ -40,10 +47,10 @@ async def chambres() -> None:
         await liste.refresh()
         ui.notify("Chambre ajoutée", type="positive")
 
-    with ui.column().classes("w-full max-w-3xl mx-auto p-4 gap-4"):
-        ui.label("Chambres").classes("text-2xl font-bold")
-        with ui.row().classes("items-end"):
-            nom = ui.input("Nom")
-            position = ui.number("Position", value=1, min=0, precision=0)
-            ui.button("Ajouter", on_click=ajouter)
+    with cadre("/chambres"):
+        titre("Chambres", "Nom, ordre sur le planning, état de la chambre")
+        with ui.row().classes("items-end gap-2"):
+            nom = ui.input("Nom").props("dense outlined").classes("w-48")
+            position = ui.number("Position", value=1, min=0, precision=0).props("dense outlined")
+            ui.button("Ajouter", on_click=ajouter).props("unelevated no-caps")
         await liste()

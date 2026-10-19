@@ -8,7 +8,7 @@ from ma_receptionniste.auth import (
     safe_redirect,
 )
 from ma_receptionniste.db import get_session
-from ma_receptionniste.pages.layout import fond
+from ma_receptionniste.pages.layout import ecran_public
 
 
 def _connecter(email: str, password: str) -> dict | None:
@@ -30,9 +30,13 @@ def _ouvrir(identite: dict, cible: str) -> None:
     ui.navigate.to(cible)
 
 
+def _marque() -> None:
+    ui.label("PANORAMA").classes("text-xs font-semibold").style("letter-spacing: 0.18em; color: #8d6840")
+    ui.label("Grasse").classes("text-xs texte-discret -mt-1")
+
+
 @ui.page("/login")
 async def login(redirect_to: str = "/") -> None:
-    fond()
     redirect_to = safe_redirect(redirect_to)
     if "user_id" in app.storage.user:
         ui.navigate.to(redirect_to)
@@ -45,21 +49,28 @@ async def login(redirect_to: str = "/") -> None:
             return
         _ouvrir(identite, redirect_to)
 
-    with ui.card().classes("absolute-center w-80"):
-        ui.label("Connexion").classes("text-xl font-bold")
-        email = ui.input("Email").props("type=email autofocus").classes("w-full").on("keydown.enter", connexion)
-        password = (
-            ui.input("Mot de passe", password=True, password_toggle_button=True)
-            .classes("w-full")
-            .on("keydown.enter", connexion)
-        )
-        ui.button("Se connecter", on_click=connexion).classes("w-full")
-        ui.link("Créer un compte", "/register")
+    with ecran_public():
+        with ui.column().classes("feuille w-96 gap-3 p-6"):
+            _marque()
+            ui.label("Connexion").classes("text-xl font-semibold")
+            email = (
+                ui.input("Email")
+                .props("type=email autofocus dense outlined")
+                .classes("w-full")
+                .on("keydown.enter", connexion)
+            )
+            password = (
+                ui.input("Mot de passe", password=True, password_toggle_button=True)
+                .props("dense outlined")
+                .classes("w-full")
+                .on("keydown.enter", connexion)
+            )
+            ui.button("Se connecter", on_click=connexion).props("unelevated no-caps").classes("w-full")
+            ui.link("Créer un compte", "/register").classes("text-sm")
 
 
 @ui.page("/register")
 async def register() -> None:
-    fond()
     if "user_id" in app.storage.user:
         ui.navigate.to("/")
         return
@@ -84,13 +95,22 @@ async def register() -> None:
             return
         _ouvrir(identite, "/")
 
-    with ui.card().classes("absolute-center w-80"):
-        ui.label("Créer un compte").classes("text-xl font-bold")
-        nom = ui.input("Nom").props("autofocus").classes("w-full")
-        email = ui.input("Email").props("type=email").classes("w-full")
-        password = ui.input("Mot de passe", password=True, password_toggle_button=True).classes("w-full")
-        confirmation = (
-            ui.input("Confirmer le mot de passe", password=True).classes("w-full").on("keydown.enter", inscription)
-        )
-        ui.button("S'inscrire", on_click=inscription).classes("w-full")
-        ui.link("Déjà un compte ? Se connecter", "/login")
+    with ecran_public():
+        with ui.column().classes("feuille w-96 gap-3 p-6"):
+            _marque()
+            ui.label("Créer un compte").classes("text-xl font-semibold")
+            nom = ui.input("Nom").props("autofocus dense outlined").classes("w-full")
+            email = ui.input("Email").props("type=email dense outlined").classes("w-full")
+            password = (
+                ui.input("Mot de passe", password=True, password_toggle_button=True)
+                .props("dense outlined")
+                .classes("w-full")
+            )
+            confirmation = (
+                ui.input("Confirmer le mot de passe", password=True)
+                .props("dense outlined")
+                .classes("w-full")
+                .on("keydown.enter", inscription)
+            )
+            ui.button("S'inscrire", on_click=inscription).props("unelevated no-caps").classes("w-full")
+            ui.link("Déjà un compte ? Se connecter", "/login").classes("text-sm")

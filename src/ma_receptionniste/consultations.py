@@ -3,14 +3,18 @@ from datetime import date, timedelta
 from sqlmodel import Session, select
 
 from ma_receptionniste.db import get_session
+from ma_receptionniste.dossier import etat_affiche, libelle_etat, nombre_nuits
 from ma_receptionniste.models import (
     Chambre,
     Client,
+    Consommation,
     EtatChambre,
     Historique,
+    Reglement,
     Reservation,
     Sejour,
     StatutReservation,
+    Ticket,
     User,
 )
 
@@ -72,7 +76,7 @@ def _etat(valeur: EtatChambre | str) -> str:
 def planning(session: Session, debut: date, fin: date) -> dict:
     chambres = session.exec(select(Chambre).order_by(Chambre.position, Chambre.nom)).all()
     lignes = session.exec(
-        select(Sejour, Client)
+        select(Sejour, Reservation, Client)
         .join(Reservation, Reservation.id == Sejour.reservation_id)
         .join(Client, Client.id == Reservation.client_id)
         .where(Reservation.statut != StatutReservation.annulee)
@@ -81,7 +85,7 @@ def planning(session: Session, debut: date, fin: date) -> dict:
         .order_by(Sejour.date_debut)
     ).all()
     sejours = []
-    for sejour, client in lignes:
+    for sejour, reservation, client in lignes:
         sejours.append(
             {
                 "id": sejour.id,
@@ -89,7 +93,7 @@ def planning(session: Session, debut: date, fin: date) -> dict:
                 "reservation_id": sejour.reservation_id,
                 "date_debut": sejour.date_debut,
                 "date_fin": sejour.date_fin,
-                "nom": sejour.nom_client or _nom_client(client.prenom, client.nom),
+                "nom": sejour.nom_client or reservation.nom_occupant or _nom_client(client.prenom, client.nom),
                 "nuits": nuits_entre(sejour.date_debut, sejour.date_fin, debut, fin),
             }
         )
@@ -139,6 +143,7 @@ def lister_clients() -> list[dict]:
                 "email": client.email,
                 "telephone": client.telephone,
                 "adresse": client.adresse,
+                "pays": client.pays,
                 "notes": client.notes,
             }
             for client in clients
@@ -164,6 +169,13 @@ def _sejour_dict(sejour: Sejour, chambre_nom: str) -> dict:
         "date_debut": sejour.date_debut,
         "date_fin": sejour.date_fin,
         "nom_client": sejour.nom_client,
+        "type_produit": sejour.type_produit,
+        "nuits": nombre_nuits(sejour.date_debut, sejour.date_fin),
+        "prix_ttc": sejour.prix_ttc,
+        "remise_pct": sejour.remise_pct,
+        "adultes": sejour.adultes,
+        "enfants": sejour.enfants,
+        "taxe_sejour": sejour.taxe_sejour,
     }
 
 
@@ -176,49 +188,114 @@ def _note_dict(note: Historique, auteur: str | None) -> dict:
     }
 
 
-def lister_reservations() -> list[dict]:
-    with get_session() as session:
-        reservations = session.exec(select(Reservation).order_by(Reservation.date_creation.desc())).all()
-        resultat = []
-        for reservation in reservations:
-            client = session.get(Client, reservation.client_id)
-            sejours = session.exec(
-                select(Sejour).where(Sejour.reservation_id == reservation.id).order_by(Sejour.date_debut)
-            ).all()
-            resultat.append(
-                {
-                    "id": reservation.id,
-                    "client": _nom_client(client.prenom, client.nom) if client else "Client inconnu",
-                    "statut": str(reservation.statut),
-                    "statut_label": _statut_label(reservation.statut),
-                    "sejours": [
-                        _sejour_dict(sejour, session.get(Chambre, sejour.chambre_id).nom) for sejour in sejours
-                    ],
-                }
-            )
-        return resultat
+def _nom_dossier(reservation: Reservation, client: Client | None) -> str:
+    if reservation.nom_occupant:
+        return reservation.nom_occupant
+    if client is None:
+        return "Client inconnu"
+    return _nom_client(client.prenom, client.nom)
 
 
-def detail_reservation(reservation_id: int) -> dict | None:
-    with get_session() as session:
-        reservation = session.get(Reservation, reservation_id)
-        if reservation is None:
-            return None
+def lire_reservations(session: Session) -> list[dict]:
+    reservations = session.exec(select(Reservation).order_by(Reservation.date_creation.desc())).all()
+    resultat = []
+    for reservation in reservations:
         client = session.get(Client, reservation.client_id)
         sejours = session.exec(
             select(Sejour).where(Sejour.reservation_id == reservation.id).order_by(Sejour.date_debut)
         ).all()
-        notes = session.exec(
-            select(Historique).where(Historique.reservation_id == reservation.id).order_by(Historique.date.desc())
-        ).all()
-        return {
-            "id": reservation.id,
-            "client": _nom_client(client.prenom, client.nom) if client else "Client inconnu",
-            "statut": str(reservation.statut),
-            "statut_label": _statut_label(reservation.statut),
-            "sejours": [_sejour_dict(sejour, session.get(Chambre, sejour.chambre_id).nom) for sejour in sejours],
-            "notes": [_note_dict(note, _auteur(session, note.user_id)) for note in notes],
-        }
+        resultat.append(
+            {
+                "id": reservation.id,
+                "client": _nom_client(client.prenom, client.nom) if client else "Client inconnu",
+                "occupant": _nom_dossier(reservation, client),
+                "statut": str(reservation.statut),
+                "statut_label": _statut_label(reservation.statut),
+                "etat": etat_affiche(reservation.statut, reservation.etat_dossier),
+                "etat_label": libelle_etat(reservation.statut, reservation.etat_dossier),
+                "sejours": [_sejour_dict(sejour, session.get(Chambre, sejour.chambre_id).nom) for sejour in sejours],
+            }
+        )
+    return resultat
+
+
+def lister_reservations() -> list[dict]:
+    with get_session() as session:
+        return lire_reservations(session)
+
+
+def lire_reservation(session: Session, reservation_id: int) -> dict | None:
+    reservation = session.get(Reservation, reservation_id)
+    if reservation is None:
+        return None
+    client = session.get(Client, reservation.client_id)
+    sejours = session.exec(
+        select(Sejour).where(Sejour.reservation_id == reservation.id).order_by(Sejour.date_debut)
+    ).all()
+    notes = session.exec(
+        select(Historique).where(Historique.reservation_id == reservation.id).order_by(Historique.date.desc())
+    ).all()
+    consommations = session.exec(
+        select(Consommation).where(Consommation.reservation_id == reservation.id).order_by(Consommation.jour)
+    ).all()
+    reglements = session.exec(
+        select(Reglement).where(Reglement.reservation_id == reservation.id).order_by(Reglement.jour)
+    ).all()
+    tickets = session.exec(select(Ticket).where(Ticket.reservation_id == reservation.id).order_by(Ticket.date)).all()
+    return {
+        "id": reservation.id,
+        "client_id": reservation.client_id,
+        "client": _nom_client(client.prenom, client.nom) if client else "Client inconnu",
+        "occupant": _nom_dossier(reservation, client),
+        "nom_occupant": reservation.nom_occupant,
+        "pays": client.pays if client else None,
+        "telephone": client.telephone if client else None,
+        "email": client.email if client else None,
+        "adresse": client.adresse if client else None,
+        "partenaire": reservation.partenaire,
+        "statut": str(reservation.statut),
+        "statut_label": _statut_label(reservation.statut),
+        "etat": etat_affiche(reservation.statut, reservation.etat_dossier),
+        "etat_label": libelle_etat(reservation.statut, reservation.etat_dossier),
+        "traite": bool(reservation.traite),
+        "type_voiture": reservation.type_voiture,
+        "date_facture": reservation.date_facture,
+        "numero_facture": reservation.numero_facture,
+        "notes": reservation.notes,
+        "notes_internes": reservation.notes_internes,
+        "notes_tempo": reservation.notes_tempo,
+        "notes_facturation": reservation.notes_facturation,
+        "sejours": [_sejour_dict(sejour, session.get(Chambre, sejour.chambre_id).nom) for sejour in sejours],
+        "consommations": [
+            {
+                "id": ligne.id,
+                "libelle": ligne.libelle,
+                "quantite": ligne.quantite,
+                "montant": ligne.montant,
+                "jour": ligne.jour,
+            }
+            for ligne in consommations
+        ],
+        "reglements": [
+            {
+                "id": ligne.id,
+                "mode": ligne.mode,
+                "montant": ligne.montant,
+                "jour": ligne.jour,
+                "reference": ligne.reference,
+            }
+            for ligne in reglements
+        ],
+        "tickets": [
+            {"id": ticket.id, "objet": ticket.objet, "detail": ticket.detail, "date": ticket.date} for ticket in tickets
+        ],
+        "modifications": [_note_dict(note, _auteur(session, note.user_id)) for note in notes],
+    }
+
+
+def detail_reservation(reservation_id: int) -> dict | None:
+    with get_session() as session:
+        return lire_reservation(session, reservation_id)
 
 
 def _auteur(session: Session, user_id: int | None) -> str | None:

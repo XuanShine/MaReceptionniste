@@ -23,10 +23,49 @@ def _activer_cles_etrangeres(dbapi_connection, _) -> None:
         cursor.close()
 
 
-def create_db_and_tables() -> None:
+COLONNES_AJOUTEES = {
+    "client": {
+        "pays": "VARCHAR",
+    },
+    "reservation": {
+        "etat_dossier": "VARCHAR NOT NULL DEFAULT 'en_cours'",
+        "traite": "INTEGER NOT NULL DEFAULT 0",
+        "nom_occupant": "VARCHAR",
+        "partenaire": "VARCHAR",
+        "type_voiture": "VARCHAR",
+        "date_facture": "DATE",
+        "numero_facture": "VARCHAR",
+        "notes": "TEXT",
+        "notes_internes": "TEXT",
+        "notes_tempo": "TEXT",
+        "notes_facturation": "TEXT",
+    },
+    "sejour": {
+        "type_produit": "VARCHAR",
+        "prix_ttc": "NUMERIC",
+        "remise_pct": "NUMERIC NOT NULL DEFAULT 0",
+        "adultes": "INTEGER NOT NULL DEFAULT 1",
+        "enfants": "INTEGER NOT NULL DEFAULT 0",
+        "taxe_sejour": "NUMERIC",
+    },
+}
+
+
+def preparer_base(cible=None) -> None:
     from ma_receptionniste import models  # noqa: F401
 
-    SQLModel.metadata.create_all(engine)
+    base = engine if cible is None else cible
+    SQLModel.metadata.create_all(base)
+    with base.begin() as connection:
+        for table, colonnes in COLONNES_AJOUTEES.items():
+            presentes = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info('{table}')")}
+            for nom, ddl in colonnes.items():
+                if nom not in presentes:
+                    connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {nom} {ddl}")
+
+
+def create_db_and_tables() -> None:
+    preparer_base()
 
 
 @contextmanager

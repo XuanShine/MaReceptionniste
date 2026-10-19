@@ -44,7 +44,8 @@ src/ma_receptionniste/
   auth.py                     hash des mots de passe, inscription, login, middleware
   db.py                       engine, création des tables, sessions
   models.py                   modèles SQLModel
-  pages.py                    pages NiceGUI
+  dossier.py                  fiche séjour : état, compte, écriture
+  pages/                      pages NiceGUI (planning, fiche, clients, chambres)
 tests/
 ```
 

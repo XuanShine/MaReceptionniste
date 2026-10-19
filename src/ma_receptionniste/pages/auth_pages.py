@@ -1,3 +1,6 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from nicegui import app, run, ui
 
 from ma_receptionniste.auth import (
@@ -8,7 +11,6 @@ from ma_receptionniste.auth import (
     safe_redirect,
 )
 from ma_receptionniste.db import get_session
-from ma_receptionniste.pages.layout import fond
 
 
 def _connecter(email: str, password: str) -> dict | None:
@@ -30,9 +32,21 @@ def _ouvrir(identite: dict, cible: str) -> None:
     ui.navigate.to(cible)
 
 
+@contextmanager
+def _carte(titre: str, page: str) -> Iterator[None]:
+    ui.page_title(f"{page} · Ma Réceptionniste")
+    ui.query("body").classes("bg-fond")
+    with ui.column().classes("absolute-center items-center gap-6 w-[24rem]"):
+        with ui.column().classes("items-center gap-0"):
+            ui.label("Hôtel Panorama").classes("text-2xl font-semibold text-primary")
+            ui.label("Ma Réceptionniste").classes("text-sm text-ardoise tracking-wide")
+        with ui.card().props("flat bordered").classes("w-full p-6 gap-4 rounded-xl"):
+            ui.label(titre).classes("text-base font-semibold")
+            yield
+
+
 @ui.page("/login")
 async def login(redirect_to: str = "/") -> None:
-    fond()
     redirect_to = safe_redirect(redirect_to)
     if "user_id" in app.storage.user:
         ui.navigate.to(redirect_to)
@@ -45,8 +59,7 @@ async def login(redirect_to: str = "/") -> None:
             return
         _ouvrir(identite, redirect_to)
 
-    with ui.card().classes("absolute-center w-80"):
-        ui.label("Connexion").classes("text-xl font-bold")
+    with _carte("Connexion", "Connexion"):
         email = ui.input("Email").props("type=email autofocus").classes("w-full").on("keydown.enter", connexion)
         password = (
             ui.input("Mot de passe", password=True, password_toggle_button=True)
@@ -54,12 +67,11 @@ async def login(redirect_to: str = "/") -> None:
             .on("keydown.enter", connexion)
         )
         ui.button("Se connecter", on_click=connexion).classes("w-full")
-        ui.link("Créer un compte", "/register")
+        ui.link("Créer un compte", "/register").classes("text-sm text-primary no-underline hover:underline self-center")
 
 
 @ui.page("/register")
 async def register() -> None:
-    fond()
     if "user_id" in app.storage.user:
         ui.navigate.to("/")
         return
@@ -84,8 +96,7 @@ async def register() -> None:
             return
         _ouvrir(identite, "/")
 
-    with ui.card().classes("absolute-center w-80"):
-        ui.label("Créer un compte").classes("text-xl font-bold")
+    with _carte("Créer un compte", "Inscription"):
         nom = ui.input("Nom").props("autofocus").classes("w-full")
         email = ui.input("Email").props("type=email").classes("w-full")
         password = ui.input("Mot de passe", password=True, password_toggle_button=True).classes("w-full")
@@ -93,4 +104,6 @@ async def register() -> None:
             ui.input("Confirmer le mot de passe", password=True).classes("w-full").on("keydown.enter", inscription)
         )
         ui.button("S'inscrire", on_click=inscription).classes("w-full")
-        ui.link("Déjà un compte ? Se connecter", "/login")
+        ui.link("Déjà un compte ? Se connecter", "/login").classes(
+            "text-sm text-primary no-underline hover:underline self-center"
+        )

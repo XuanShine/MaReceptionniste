@@ -49,32 +49,45 @@ def enregistrer_sejour(
     date_debut: date,
     date_fin: date,
     nom_client: Any = _INCHANGE,
+    adultes: Any = _INCHANGE,
+    enfants: Any = _INCHANGE,
+    prix_nuit_centimes: Any = _INCHANGE,
+    remise_pct: Any = _INCHANGE,
     ignorer_sejour_id: int | None = None,
 ) -> Sejour:
     if date_fin <= date_debut:
         raise SejourInvalide("Le départ doit être après l'arrivée")
+    if remise_pct is not _INCHANGE and not 0 <= remise_pct <= 100:
+        raise SejourInvalide("La remise doit être comprise entre 0 et 100 %")
+    if any(valeur is not _INCHANGE and valeur < 0 for valeur in (adultes, enfants, prix_nuit_centimes)):
+        raise SejourInvalide("Les occupants et le prix ne peuvent pas être négatifs")
     if not chambre_libre(session, chambre_id, date_debut, date_fin, ignorer_sejour_id):
         raise ChambreOccupee("La chambre est déjà occupée sur cette période")
 
+    facultatifs = {
+        "nom_client": nom_client,
+        "adultes": adultes,
+        "enfants": enfants,
+        "prix_nuit_centimes": prix_nuit_centimes,
+        "remise_pct": remise_pct,
+    }
+    champs = {
+        "reservation_id": reservation_id,
+        "chambre_id": chambre_id,
+        "date_debut": date_debut,
+        "date_fin": date_fin,
+        **{nom: valeur for nom, valeur in facultatifs.items() if valeur is not _INCHANGE},
+    }
+
     if ignorer_sejour_id is None:
-        sejour = Sejour(
-            reservation_id=reservation_id,
-            chambre_id=chambre_id,
-            date_debut=date_debut,
-            date_fin=date_fin,
-            nom_client=None if nom_client is _INCHANGE else nom_client,
-        )
+        sejour = Sejour(**champs)
         session.add(sejour)
         return sejour
 
     sejour = session.get(Sejour, ignorer_sejour_id)
     if sejour is None:
         raise SejourInvalide("Séjour introuvable")
-    sejour.reservation_id = reservation_id
-    sejour.chambre_id = chambre_id
-    sejour.date_debut = date_debut
-    sejour.date_fin = date_fin
-    if nom_client is not _INCHANGE:
-        sejour.nom_client = nom_client
+    for nom, valeur in champs.items():
+        setattr(sejour, nom, valeur)
     session.add(sejour)
     return sejour

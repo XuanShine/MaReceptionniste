@@ -1,0 +1,3 @@
+ts	phase	decision	why	evidence	result
+2026-10-19T16:40:41Z	frame	Fiche séjour sur les modèles existants, colonnes nullables, thème comptoir	La capture fixe la disposition. Le statut confirmee/annulee reste le seul interrupteur d'occupation. Les champs manquants s'ajoutent sans Alembic, avec un ALTER idempotent pour le sqlite déjà en place.	models.py sejours.py	open
+2026-10-19T16:43:36Z	domain	Colonnes nullables et compte de la fiche, sans toucher au statut d'occupation	create_all ne migre pas le sqlite du PC. Un ALTER idempotent garde les lignes. Annuler libère la chambre. Reprendre une chambre déjà reprise est refusé.	tests/test_fiche.py	41 tests green

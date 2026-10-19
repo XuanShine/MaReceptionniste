@@ -1,6 +1,8 @@
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from enum import StrEnum
 
+from sqlalchemy import Column, Numeric, Text
 from sqlmodel import AutoString, Field, Relationship, SQLModel
 
 # La base applique RESTRICT ou SET NULL. L'ORM ne réécrit pas les liens avant un DELETE.
@@ -15,6 +17,14 @@ class EtatChambre(StrEnum):
 class StatutReservation(StrEnum):
     confirmee = "confirmee"
     annulee = "annulee"
+
+
+class EtatDossier(StrEnum):
+    """Ce que la fiche affiche à côté de « Traité ». Distinct du statut qui libère la chambre."""
+
+    en_cours = "en_cours"
+    option = "option"
+    parti = "parti"
 
 
 class User(SQLModel, table=True):
@@ -34,6 +44,7 @@ class Client(SQLModel, table=True):
     telephone: str | None = None
     email: str | None = None
     adresse: str | None = None
+    pays: str | None = None
     notes: str | None = None
     cree_le: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -53,6 +64,17 @@ class Reservation(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     client_id: int = Field(foreign_key="client.id", index=True)
     statut: StatutReservation = Field(default=StatutReservation.confirmee, sa_type=AutoString)
+    etat_dossier: EtatDossier = Field(default=EtatDossier.en_cours, sa_type=AutoString)
+    traite: bool = Field(default=False)
+    nom_occupant: str | None = None
+    partenaire: str | None = None
+    type_voiture: str | None = None
+    date_facture: date | None = None
+    numero_facture: str | None = None
+    notes: str | None = Field(default=None, sa_column=Column(Text))
+    notes_internes: str | None = Field(default=None, sa_column=Column(Text))
+    notes_tempo: str | None = Field(default=None, sa_column=Column(Text))
+    notes_facturation: str | None = Field(default=None, sa_column=Column(Text))
     date_creation: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     client: Client = Relationship(back_populates="reservations")
@@ -67,6 +89,15 @@ class Sejour(SQLModel, table=True):
     date_debut: date
     date_fin: date
     nom_client: str | None = None
+    type_produit: str | None = None
+    prix_ttc: Decimal | None = Field(default=None, sa_column=Column(Numeric(12, 2)))
+    remise_pct: Decimal = Field(
+        default=Decimal("0"),
+        sa_column=Column(Numeric(5, 2), nullable=False, server_default="0"),
+    )
+    adultes: int = Field(default=1)
+    enfants: int = Field(default=0)
+    taxe_sejour: Decimal | None = Field(default=None, sa_column=Column(Numeric(12, 2)))
 
     reservation: Reservation = Relationship(back_populates="sejours")
     chambre: Chambre = Relationship(back_populates="sejours")
@@ -81,3 +112,32 @@ class Historique(SQLModel, table=True):
 
     reservation: Reservation | None = Relationship(back_populates="historiques")
     user: User | None = Relationship(back_populates="historiques")
+
+
+class Consommation(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    reservation_id: int = Field(foreign_key="reservation.id", index=True)
+    libelle: str
+    quantite: int = Field(default=1)
+    montant: Decimal = Field(
+        default=Decimal("0"),
+        sa_column=Column(Numeric(12, 2), nullable=False, server_default="0"),
+    )
+    jour: date
+
+
+class Reglement(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    reservation_id: int = Field(foreign_key="reservation.id", index=True)
+    mode: str
+    montant: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    jour: date
+    reference: str | None = None
+
+
+class Ticket(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    reservation_id: int = Field(foreign_key="reservation.id", index=True)
+    objet: str
+    detail: str | None = Field(default=None, sa_column=Column(Text))
+    date: datetime = Field(default_factory=lambda: datetime.now(UTC))

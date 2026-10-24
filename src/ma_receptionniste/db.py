@@ -55,12 +55,34 @@ def ajouter_colonnes_manquantes(engine: Engine) -> list[str]:
                 f"{colonne.table.name}.{colonne.name} manque en base : "
                 "rendez-la nullable ou donnez-lui un server_default"
             )
+    ajoutees = [f"{colonne.table.name}.{colonne.name}" for colonne in manquantes]
     with engine.begin() as connexion:
         for colonne in manquantes:
             nom_table = engine.dialect.identifier_preparer.format_table(colonne.table)
             definition = CreateColumn(colonne).compile(dialect=engine.dialect)
             connexion.exec_driver_sql(f"ALTER TABLE {nom_table} ADD COLUMN {definition}")
-    return [f"{colonne.table.name}.{colonne.name}" for colonne in manquantes]
+        _reprendre_valeurs_anciennes(connexion, set(ajoutees))
+    return ajoutees
+
+
+def _a_colonne(connexion, table: str, colonne: str) -> bool:
+    noms = {ligne[1] for ligne in connexion.exec_driver_sql(f"PRAGMA table_info('{table}')")}
+    return colonne in noms
+
+
+def _reprendre_valeurs_anciennes(connexion, ajoutees: set[str]) -> None:
+    """Recopie les euros d'un schéma antérieur, seulement pour les colonnes qui viennent d'être ajoutées."""
+    if "sejour.prix_nuit_centimes" in ajoutees and _a_colonne(connexion, "sejour", "prix_ttc"):
+        connexion.exec_driver_sql(
+            "UPDATE sejour SET prix_nuit_centimes = CAST(ROUND(prix_ttc * 100) AS INTEGER) WHERE prix_ttc IS NOT NULL"
+        )
+    if "reglement.montant_centimes" in ajoutees and _a_colonne(connexion, "reglement", "montant"):
+        connexion.exec_driver_sql(
+            "UPDATE reglement SET montant_centimes = CAST(ROUND(montant * 100) AS INTEGER) WHERE montant IS NOT NULL"
+        )
+        connexion.exec_driver_sql("UPDATE reglement SET mode = 'carte' WHERE mode = 'CB'")
+    if "reglement.date" in ajoutees and _a_colonne(connexion, "reglement", "jour"):
+        connexion.exec_driver_sql("UPDATE reglement SET date = date(jour) || ' 00:00:00' WHERE jour IS NOT NULL")
 
 
 @contextmanager

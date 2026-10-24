@@ -105,8 +105,12 @@ class Consommation(SQLModel, table=True):
     reservation_id: int = Field(foreign_key="reservation.id", index=True)
     libelle: str
     quantite: int = 1
-    prix_unitaire_centimes: int
-    date: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # NOT NULL sur une table déjà créée : SQLite n'ajoute la colonne que s'il a un DEFAULT constant.
+    prix_unitaire_centimes: int = Field(sa_column_kwargs={"server_default": "0"})
+    date: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column_kwargs={"server_default": "1970-01-01 00:00:00"},
+    )
 
     reservation: Reservation = Relationship(back_populates="consommations")
 
@@ -115,8 +119,11 @@ class Reglement(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     reservation_id: int = Field(foreign_key="reservation.id", index=True)
     mode: ModeReglement = Field(sa_type=AutoString)
-    montant_centimes: int
-    date: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    montant_centimes: int = Field(sa_column_kwargs={"server_default": "0"})
+    date: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column_kwargs={"server_default": "1970-01-01 00:00:00"},
+    )
 
     reservation: Reservation = Relationship(back_populates="reglements")
 

@@ -6,7 +6,15 @@ import pytest
 from sqlmodel import Session, create_engine, select
 
 from ma_receptionniste.db import ColonneNonAjoutable, ajouter_colonnes_manquantes, create_db_and_tables
-from ma_receptionniste.models import Chambre, Client, Consommation, ModeReglement, Reglement, Reservation, Sejour
+from ma_receptionniste.models import (
+    Chambre,
+    Client,
+    Consommation,
+    ModeReglement,
+    Reglement,
+    Reservation,
+    Sejour,
+)
 
 ANCIEN_SCHEMA = """
 CREATE TABLE user (
@@ -96,6 +104,66 @@ def test_migration_idempotente() -> None:
     assert "sejour.adultes" in premiere
     assert "reservation.traitee" in premiere
     assert seconde == []
+
+
+ANCIEN_ARGENT = """
+CREATE TABLE client (
+    id INTEGER NOT NULL, nom VARCHAR NOT NULL, prenom VARCHAR, telephone VARCHAR, email VARCHAR,
+    adresse VARCHAR, notes VARCHAR, cree_le DATETIME NOT NULL, PRIMARY KEY (id)
+);
+CREATE TABLE chambre (
+    id INTEGER NOT NULL, nom VARCHAR NOT NULL, position INTEGER NOT NULL, etat VARCHAR NOT NULL,
+    PRIMARY KEY (id), UNIQUE (nom)
+);
+CREATE TABLE reservation (
+    id INTEGER NOT NULL, client_id INTEGER NOT NULL, statut VARCHAR NOT NULL, date_creation DATETIME NOT NULL,
+    PRIMARY KEY (id)
+);
+CREATE TABLE sejour (
+    id INTEGER NOT NULL, reservation_id INTEGER NOT NULL, chambre_id INTEGER NOT NULL,
+    date_debut DATE NOT NULL, date_fin DATE NOT NULL, nom_client VARCHAR,
+    prix_ttc NUMERIC, remise_pct NUMERIC NOT NULL DEFAULT 0,
+    adultes INTEGER NOT NULL DEFAULT 1, enfants INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (id)
+);
+CREATE TABLE consommation (
+    id INTEGER NOT NULL, reservation_id INTEGER NOT NULL, libelle VARCHAR NOT NULL,
+    quantite INTEGER NOT NULL, montant NUMERIC(12, 2) NOT NULL DEFAULT '0', jour DATE NOT NULL,
+    PRIMARY KEY (id)
+);
+CREATE TABLE reglement (
+    id INTEGER NOT NULL, reservation_id INTEGER NOT NULL, mode VARCHAR NOT NULL,
+    montant NUMERIC(12, 2) NOT NULL, jour DATE NOT NULL, reference VARCHAR, PRIMARY KEY (id)
+);
+INSERT INTO client (id, nom, cree_le) VALUES (1, 'Dupont', '2026-10-01 09:00:00');
+INSERT INTO chambre (id, nom, position, etat) VALUES (1, '102', 1, 'non_pret');
+INSERT INTO reservation (id, client_id, statut, date_creation) VALUES (1, 1, 'confirmee', '2026-10-18 06:23:43');
+INSERT INTO sejour (id, reservation_id, chambre_id, date_debut, date_fin, prix_ttc)
+    VALUES (1, 1, 1, '2026-10-20', '2026-10-23', 50);
+INSERT INTO reglement (id, reservation_id, mode, montant, jour) VALUES (1, 1, 'CB', 50, '2026-10-19');
+INSERT INTO reglement (id, reservation_id, mode, montant, jour) VALUES (2, 1, 'CB', 2, '2026-10-19');
+"""
+
+
+def test_ancienne_base_reprend_les_montants_en_euros() -> None:
+    engine = ancienne_base(ANCIEN_ARGENT)
+
+    create_db_and_tables(engine)
+
+    with Session(engine) as session:
+        assert session.get(Chambre, 1).type_chambre is None
+        assert session.get(Sejour, 1).prix_nuit_centimes == 5000
+        reglements = session.exec(select(Reglement).order_by(Reglement.id)).all()
+        assert [(r.mode, r.montant_centimes, r.date.date()) for r in reglements] == [
+            (ModeReglement.carte, 5000, date(2026, 10, 19)),
+            (ModeReglement.carte, 200, date(2026, 10, 19)),
+        ]
+        session.get(Sejour, 1).prix_nuit_centimes = 100
+        session.commit()
+
+    create_db_and_tables(engine)
+
+    with Session(engine) as session:
+        assert session.get(Sejour, 1).prix_nuit_centimes == 100
 
 
 def test_colonne_obligatoire_sans_defaut_refusee_sans_rien_toucher() -> None:

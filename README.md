@@ -23,6 +23,29 @@ uv run ruff format .       # formatage
 
 Sans rechargement auto : `uv run ma-receptionniste`.
 
+## Lancer Ma Gouvernante
+
+Ma Gouvernante est une deuxième application, dans `src/ma_gouvernante`. Elle surveille le ménage des chambres. Elle lit la même variable `DATABASE_URL` que Ma Réceptionniste, et donc la même base. Les chambres et les comptes sont ceux de `ma_receptionniste.models`. Au premier démarrage, l'application ajoute la colonne `user.role` (valeur `receptionniste` pour un compte déjà présent), puis les tables `menage` et `historique_menage`.
+
+Les deux serveurs utilisent des ports et des cookies de session différents. Vous pouvez les lancer ensemble, dans deux terminaux.
+
+```bash
+uv run python main.py                 # Ma Réceptionniste, http://127.0.0.1:8080
+uv run python main_gouvernante.py     # Ma Gouvernante, http://127.0.0.1:8081
+```
+
+Sans rechargement auto : `uv run ma-gouvernante`. Le port de Ma Gouvernante est `GOUVERNANTE_PORT`, puis `PORT`, puis `8081`.
+
+Trois comptes sont créés s'ils n'existent pas. Le mot de passe est `panorama`.
+
+| Email | Rôle |
+| --- | --- |
+| `admin@hotel-panorama.fr` | Admin |
+| `reception@hotel-panorama.fr` | Réceptionniste |
+| `femme@hotel-panorama.fr` | Femme de chambre |
+
+Si l'email existe déjà, le mot de passe et le rôle restent ceux de la base. C'est le cas de `reception@hotel-panorama.fr` après `scripts/donnees_exemple.py`, dont le mot de passe est aussi `panorama`. L'inscription publique crée uniquement une femme de chambre.
+
 Le test d'interface (`tests/test_fiche_ui.py`) utilise la fixture `User` de NiceGUI, sans navigateur. `pyproject.toml` charge le plugin (`-p nicegui.testing.user_plugin`) et désigne `main.py` comme fichier principal.
 
 ## Données de démonstration
@@ -53,6 +76,7 @@ Variables d'environnement :
 
 ```
 main.py                       point d'entrée de dev (reload)
+main_gouvernante.py           point d'entrée de dev de Ma Gouvernante
 scripts/
   donnees_exemple.py          base de démonstration, relançable
 src/ma_receptionniste/
@@ -73,6 +97,11 @@ src/ma_receptionniste/
     fiche.py                  /reservations/{id} (fiche séjour)
     clients.py                /clients
     chambres.py               /chambres
+src/ma_gouvernante/
+  __init__.py                 main() : thème, pages, démarrage sur le port 8081
+  menage.py                   liste du jour, statuts, historique, droits
+  comptes.py                  comptes de démonstration, sans écraser un email existant
+  pages/                      login, ménage du jour, historique, chambres
 tests/
 ```
 

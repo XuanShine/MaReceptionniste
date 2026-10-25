@@ -9,7 +9,9 @@ from ma_receptionniste.db import create_db_and_tables
 def main(reload: bool = False) -> None:
     # Importer les pages enregistre leurs routes. Le faire ici, et non à l'import du paquet,
     # laisse la simulation de test de NiceGUI les réenregistrer après avoir vidé le routeur.
-    from ma_receptionniste import pages  # noqa: F401
+    from ma_receptionniste.pages import enregistrer_routes
+
+    enregistrer_routes()
     from ma_receptionniste.pages.theme import appliquer_theme
 
     appliquer_theme()

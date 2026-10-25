@@ -9,6 +9,7 @@ from ma_receptionniste.auth import (
     safe_redirect,
     verify_password,
 )
+from ma_receptionniste.models import Role
 
 
 @pytest.fixture
@@ -30,6 +31,7 @@ def test_hash_password() -> None:
 def test_register_et_authenticate(session: Session) -> None:
     user = register_user(session, "  Alice@Example.com ", "Alice", "motdepasse")
     assert user.email == "alice@example.com"
+    assert user.role == Role.receptionniste
 
     assert authenticate(session, "ALICE@example.com", "motdepasse").id == user.id
     assert authenticate(session, "alice@example.com", "mauvais") is None

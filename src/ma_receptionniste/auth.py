@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ma_receptionniste.db import get_session
-from ma_receptionniste.models import User
+from ma_receptionniste.models import Role, User
 
 PUBLIC_ROUTES = {"/login", "/register"}
 MIN_PASSWORD_LENGTH = 4
@@ -42,11 +42,17 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
-def register_user(session: Session, email: str, nom: str, password: str) -> User:
+def register_user(
+    session: Session,
+    email: str,
+    nom: str,
+    password: str,
+    role: Role = Role.receptionniste,
+) -> User:
     email = normalize_email(email)
     if session.exec(select(User).where(User.email == email)).first():
         raise EmailDejaUtilise(email)
-    user = User(email=email, nom=nom.strip(), password_hash=hash_password(password))
+    user = User(email=email, nom=nom.strip(), password_hash=hash_password(password), role=role)
     session.add(user)
     session.commit()
     session.refresh(user)

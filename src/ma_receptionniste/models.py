@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import AutoString, Field, Relationship, SQLModel
 
 # La base applique RESTRICT ou SET NULL. L'ORM ne réécrit pas les liens avant un DELETE.
@@ -10,6 +11,25 @@ _LA_BASE_DECIDE = {"passive_deletes": "all"}
 class EtatChambre(StrEnum):
     pret = "pret"
     non_pret = "non_pret"
+
+
+class Role(StrEnum):
+    admin = "admin"
+    receptionniste = "receptionniste"
+    femme_de_chambre = "femme_de_chambre"
+
+
+class TypeMenage(StrEnum):
+    DEPART = "DEPART"
+    RECOUCHE = "RECOUCHE"
+    RECOUCHE_PLUS = "RECOUCHE+"
+    AUTRE = "AUTRE"
+
+
+class StatutMenage(StrEnum):
+    a_faire = "a_faire"
+    en_cours = "en_cours"
+    fait = "fait"
 
 
 class StatutReservation(StrEnum):
@@ -30,6 +50,11 @@ class User(SQLModel, table=True):
     email: str = Field(index=True, unique=True)
     nom: str
     password_hash: str
+    role: Role = Field(
+        default=Role.receptionniste,
+        sa_type=AutoString,
+        sa_column_kwargs={"server_default": "receptionniste"},
+    )
     cree_le: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     historiques: list["Historique"] = Relationship(back_populates="user", sa_relationship_kwargs=_LA_BASE_DECIDE)
@@ -130,3 +155,40 @@ class Historique(SQLModel, table=True):
 
     reservation: Reservation | None = Relationship(back_populates="historiques")
     user: User | None = Relationship(back_populates="historiques")
+
+
+class Menage(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("jour", "chambre_id", name="uq_menage_jour_chambre"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    jour: date = Field(index=True)
+    chambre_id: int = Field(foreign_key="chambre.id", index=True)
+    type: TypeMenage = Field(
+        default=TypeMenage.DEPART,
+        sa_type=AutoString,
+        sa_column_kwargs={"server_default": "DEPART"},
+    )
+    notes: str | None = None
+    statut: StatutMenage = Field(
+        default=StatutMenage.a_faire,
+        sa_type=AutoString,
+        sa_column_kwargs={"server_default": "a_faire"},
+    )
+    cree_par_id: int | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
+    modifie_par_id: int | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
+    cree_le: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    modifie_le: datetime | None = None
+
+
+class HistoriqueMenage(SQLModel, table=True):
+    __tablename__ = "historique_menage"
+
+    id: int | None = Field(default=None, primary_key=True)
+    menage_id: int | None = Field(default=None, foreign_key="menage.id", ondelete="SET NULL", index=True)
+    user_id: int | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
+    auteur_nom: str
+    chambre_nom: str
+    jour: date = Field(index=True)
+    ancien_statut: str
+    nouveau_statut: str
+    quand: datetime = Field(default_factory=lambda: datetime.now(UTC))

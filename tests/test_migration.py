@@ -6,7 +6,17 @@ import pytest
 from sqlmodel import Session, create_engine, select
 
 from ma_receptionniste.db import ColonneNonAjoutable, ajouter_colonnes_manquantes, create_db_and_tables
-from ma_receptionniste.models import Chambre, Client, Consommation, ModeReglement, Reglement, Reservation, Sejour
+from ma_receptionniste.models import (
+    Chambre,
+    Client,
+    Consommation,
+    ModeReglement,
+    Reglement,
+    Reservation,
+    Role,
+    Sejour,
+    User,
+)
 
 ANCIEN_SCHEMA = """
 CREATE TABLE user (
@@ -85,6 +95,23 @@ def test_ancienne_base_recoit_les_nouvelles_colonnes() -> None:
 
         assert [c.libelle for c in session.exec(select(Consommation)).all()] == ["Petit-déjeuner"]
         assert session.exec(select(Reglement)).one().mode == ModeReglement.carte
+
+
+def test_compte_existant_recoit_le_role_receptionniste() -> None:
+    engine = ancienne_base(ANCIEN_SCHEMA)
+    with engine.begin() as connexion:
+        connexion.exec_driver_sql(
+            "INSERT INTO user (id, email, nom, password_hash, cree_le) "
+            "VALUES (1, 'a@b.c', 'Alice', 'x', '2026-10-01 09:00:00')"
+        )
+
+    create_db_and_tables(engine)
+
+    with Session(engine) as session:
+        user = session.get(User, 1)
+        assert user is not None
+        assert user.role == Role.receptionniste
+        assert user.email == "a@b.c"
 
 
 def test_migration_idempotente() -> None:

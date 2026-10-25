@@ -23,28 +23,36 @@ async def page_chambres() -> None:
     if refuser(acteur):
         return
     assert acteur is not None
+    peut_gerer = autorise(acteur, Action.gerer_chambres)
     with page("/chambres", "Chambres", acteur):
-        if not autorise(acteur, Action.gerer_chambres):
-            etat_vide("lock", "Seule l'admin gère les chambres et leur état.")
-            return
 
         @ui.refreshable
         async def tableau() -> None:
             lignes = await run.io_bound(chambres, acteur)
-            position.value = max((ligne.position for ligne in lignes), default=0) + 1
+            if peut_gerer:
+                position.value = max((ligne.position for ligne in lignes), default=0) + 1
             if not lignes:
-                etat_vide("bed", "Aucune chambre. Ajoutez la première avec le formulaire ci-dessus.")
+                phrase = (
+                    "Aucune chambre. Ajoutez la première avec le formulaire ci-dessus."
+                    if peut_gerer
+                    else "Aucune chambre."
+                )
+                etat_vide("bed", phrase)
                 return
             for ligne in lignes:
                 with ui.card().props("flat bordered").classes("w-full rounded-lg px-4 py-3"):
                     with ui.row().classes("w-full items-center justify-between no-wrap"):
-                        with ui.column().classes("gap-0"):
-                            ui.label(ligne.nom).classes("text-lg font-semibold tabular-nums")
+                        with ui.link(target=f"/chambres/{ligne.id}").classes(
+                            "flex-1 no-underline text-inherit min-w-0"
+                        ):
+                            ui.label(ligne.nom).classes("text-lg font-semibold tabular-nums text-primary")
                             detail = ligne.type_chambre or "Type non renseigné"
                             ui.label(f"Position {ligne.position} · {detail}").classes("text-xs text-ardoise")
                         with ui.row().classes("items-center gap-2"):
                             prete = ligne.etat == EtatChambre.pret.value
                             badge(LIBELLE_ETAT[EtatChambre(ligne.etat)], "positive" if prete else "warning")
+                            if not peut_gerer:
+                                continue
 
                             async def basculer(chambre_id=ligne.id, etat=ligne.etat) -> None:
                                 cible = (
@@ -89,11 +97,12 @@ async def page_chambres() -> None:
             ui.notify("Chambre ajoutée", type="positive")
             await tableau.refresh()
 
-        with ui.card().props("flat bordered").classes("w-full rounded-lg px-4 py-3 gap-3"):
-            ui.label("Nouvelle chambre").classes("text-sm font-semibold")
-            with ui.row().classes("w-full items-end gap-3"):
-                nom = ui.input("Nom ou numéro").classes("w-48").on("keydown.enter", ajouter)
-                type_nouvelle = ui.input("Type", autocomplete=TYPES_COURANTS).classes("w-56")
-                position = ui.number("Position", value=1, min=0, precision=0).classes("w-32")
-                ui.button("Ajouter", icon="add", on_click=ajouter)
+        if peut_gerer:
+            with ui.card().props("flat bordered").classes("w-full rounded-lg px-4 py-3 gap-3"):
+                ui.label("Nouvelle chambre").classes("text-sm font-semibold")
+                with ui.row().classes("w-full items-end gap-3"):
+                    nom = ui.input("Nom ou numéro").classes("w-48").on("keydown.enter", ajouter)
+                    type_nouvelle = ui.input("Type", autocomplete=TYPES_COURANTS).classes("w-56")
+                    position = ui.number("Position", value=1, min=0, precision=0).classes("w-32")
+                    ui.button("Ajouter", icon="add", on_click=ajouter)
         await tableau()

@@ -17,6 +17,7 @@ from ma_gouvernante.menage import (
     changer_statut,
     creer_chambre,
     definir_etat,
+    fiche_chambre,
     lister_historique,
     lister_menages,
     poser_menage,
@@ -171,6 +172,31 @@ def test_admin_gere_les_chambres_les_autres_non(session: Session, monde) -> None
     assert chambre.nom == "14"
     assert chambre.type_chambre == "Double"
     assert str(chambre.etat) == "pret"
+
+
+def test_fiche_chambre_montre_le_menage_du_jour_et_son_historique(session: Session, monde) -> None:
+    depart = poser_menage(session, monde.reception, JOUR, monde.dix.id, "DEPART", "Serviettes")
+    changer_statut(session, monde.femme, depart.id, "en_cours")
+    autre = poser_menage(session, monde.reception, JOUR, monde.douze.id, "RECOUCHE", None)
+    changer_statut(session, monde.femme, autre.id, "fait")
+    poser_menage(session, monde.reception, JOUR + timedelta(days=1), monde.dix.id, "AUTRE", "demain")
+
+    fiche = fiche_chambre(session, monde.femme, monde.dix.id, JOUR)
+
+    assert (fiche.nom, fiche.position, fiche.etat) == ("10", 1, "non_pret")
+    assert fiche.menage is not None
+    assert (fiche.menage.type, fiche.menage.notes, fiche.menage.statut) == ("DEPART", "Serviettes", "en_cours")
+    assert [(ligne.ancien, ligne.nouveau, ligne.chambre) for ligne in fiche.historique] == [
+        ("a_faire", "en_cours", "10")
+    ]
+    lendemain = fiche_chambre(session, monde.reception, monde.douze.id, JOUR + timedelta(days=1))
+    assert lendemain.menage is None
+    assert lendemain.historique[0].nouveau == "fait"
+
+
+def test_fiche_chambre_inconnue(session: Session, monde) -> None:
+    with pytest.raises(ChambreInconnue):
+        fiche_chambre(session, monde.femme, 999, JOUR)
 
 
 def test_comptes_demo_idempotents_sans_ecraser_un_compte_existant(session: Session) -> None:

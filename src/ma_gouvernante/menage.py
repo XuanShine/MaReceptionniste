@@ -124,6 +124,17 @@ class LigneChambre:
     etat: str
 
 
+@dataclass(frozen=True)
+class FicheChambre:
+    id: int
+    nom: str
+    type_chambre: str | None
+    position: int
+    etat: str
+    menage: LigneMenage | None
+    historique: list[LigneHistorique]
+
+
 def autorise(acteur: Acteur, action: Action) -> bool:
     return action in DROITS[acteur.role]
 
@@ -249,18 +260,29 @@ def lister_historique(session: Session, acteur: Acteur, jour: date | None = None
     requete = select(HistoriqueMenage).order_by(HistoriqueMenage.quand.desc(), HistoriqueMenage.id.desc())
     if jour is not None:
         requete = requete.where(HistoriqueMenage.jour == jour)
-    return [
-        LigneHistorique(
-            id=ligne.id or 0,
-            quand=ligne.quand,
-            date=ligne.jour,
-            chambre=ligne.chambre_nom,
-            ancien=ligne.ancien_statut,
-            nouveau=ligne.nouveau_statut,
-            auteur=ligne.auteur_nom,
-        )
-        for ligne in session.exec(requete).all()
-    ]
+    return [_historique(ligne) for ligne in session.exec(requete).all()]
+
+
+def fiche_chambre(session: Session, acteur: Acteur, chambre_id: int, jour: date) -> FicheChambre:
+    exiger(acteur, Action.voir)
+    chambre = session.get(Chambre, chambre_id)
+    if chambre is None:
+        raise ChambreInconnue(chambre_id)
+    menage = session.exec(select(Menage).where(Menage.jour == jour, Menage.chambre_id == chambre_id)).first()
+    historique = session.exec(
+        select(HistoriqueMenage)
+        .where(HistoriqueMenage.chambre_nom == chambre.nom)
+        .order_by(HistoriqueMenage.quand.desc(), HistoriqueMenage.id.desc())
+    ).all()
+    return FicheChambre(
+        id=chambre.id or 0,
+        nom=chambre.nom,
+        type_chambre=chambre.type_chambre,
+        position=chambre.position,
+        etat=_valeur(chambre.etat),
+        menage=_ligne(session, menage) if menage else None,
+        historique=[_historique(ligne) for ligne in historique],
+    )
 
 
 def lister_chambres(session: Session, acteur: Acteur) -> list[LigneChambre]:
@@ -332,6 +354,18 @@ def _notes(valeur: str | None) -> str | None:
         return None
     texte = valeur.strip()
     return texte or None
+
+
+def _historique(ligne: HistoriqueMenage) -> LigneHistorique:
+    return LigneHistorique(
+        id=ligne.id or 0,
+        quand=ligne.quand,
+        date=ligne.jour,
+        chambre=ligne.chambre_nom,
+        ancien=ligne.ancien_statut,
+        nouveau=ligne.nouveau_statut,
+        auteur=ligne.auteur_nom,
+    )
 
 
 def _valeur(valeur: StrEnum | str) -> str:

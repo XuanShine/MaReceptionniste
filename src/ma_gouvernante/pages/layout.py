@@ -3,7 +3,7 @@ from contextlib import contextmanager
 
 from nicegui import app, ui
 
-from ma_gouvernante.menage import LIBELLE_ROLE, Acteur, Role
+from ma_gouvernante.menage import LIBELLE_ROLE, Acteur
 from ma_receptionniste.auth import logout_user
 from ma_receptionniste.pages.layout import badge, etat_vide
 
@@ -14,14 +14,12 @@ def _initiales(nom: str) -> str:
     return "".join(mot[0] for mot in nom.split()[:2]).upper() or "?"
 
 
-def _navigation(role: Role) -> tuple[tuple[str, str, str], ...]:
-    liens = (
+def _navigation() -> tuple[tuple[str, str, str], ...]:
+    return (
         ("/", "Ménage", "mop"),
+        ("/chambres", "Chambres", "bed"),
         ("/historique", "Historique", "history"),
     )
-    if role == Role.admin:
-        return (*liens, ("/chambres", "Chambres", "bed"))
-    return liens
 
 
 @contextmanager
@@ -48,7 +46,7 @@ def _menu(actif: str, acteur: Acteur) -> None:
             ui.label("Hôtel Panorama").classes("text-lg font-semibold text-primary leading-tight")
             ui.label("Ma Gouvernante").classes("text-xs text-ardoise tracking-wide")
         with ui.column().classes("w-full gap-1 px-3"):
-            for cible, libelle, icone in _navigation(acteur.role):
+            for cible, libelle, icone in _navigation():
                 courant = cible == actif
                 with ui.link(target=cible).classes(
                     "w-full flex items-center gap-3 rounded-md px-3 py-2 text-sm no-underline transition-colors "

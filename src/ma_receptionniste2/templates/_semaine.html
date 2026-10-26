@@ -1,0 +1,55 @@
+<section id="semaine">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <a class="btn-quiet"
+       href="/?debut={{ semaine.precedente.isoformat() }}"
+       hx-get="/?debut={{ semaine.precedente.isoformat() }}"
+       hx-target="#semaine"
+       hx-select="#semaine"
+       hx-swap="outerHTML"
+       hx-push-url="true">Semaine précédente</a>
+    <p class="text-sm">{{ semaine.titre }}</p>
+    <a class="btn-quiet"
+       href="/?debut={{ semaine.suivante.isoformat() }}"
+       hx-get="/?debut={{ semaine.suivante.isoformat() }}"
+       hx-target="#semaine"
+       hx-select="#semaine"
+       hx-swap="outerHTML"
+       hx-push-url="true">Semaine suivante</a>
+  </div>
+  {% if not semaine.lignes %}
+    <p class="mt-10 text-sm text-mute">Aucune chambre. <a class="lien" href="/chambres">Ajouter une chambre</a> pour tenir le planning.</p>
+  {% else %}
+    <div class="mt-6 overflow-x-auto">
+      <div class="grid min-w-[56rem] gap-px bg-line" style="grid-template-columns: 11rem repeat(7, minmax(0, 1fr))">
+        <div class="bg-paper"></div>
+        {% for jour in semaine.jours %}
+          <div class="bg-paper px-2 py-3 text-center">
+            <p class="text-xs uppercase tracking-wide {{ 'text-ink' if jour.aujourdhui else 'text-mute' }}">{{ jour.court }}</p>
+            <p class="text-sm {{ 'font-medium' if jour.aujourdhui else '' }}">{{ jour.numero }}</p>
+          </div>
+        {% endfor %}
+        {% for ligne in semaine.lignes %}
+          <div class="sticky left-0 z-10 flex flex-col justify-center bg-paper px-3 py-3">
+            <p class="text-sm">{{ ligne.nom }}</p>
+            <p class="mt-1 flex items-center text-xs text-mute">
+              <span class="mr-2 inline-block size-1.5 rounded-full {{ 'bg-ready' if ligne.prete else 'bg-wait' }}"></span>
+              {{ ligne.etat_label }}
+            </p>
+          </div>
+          {% for segment in ligne.segments %}
+            {% if segment.sejour %}
+              <a class="flex min-h-14 min-w-0 items-center overflow-hidden bg-ink px-3 text-sm text-paper hover:bg-ink/90"
+                 href="/reservations/{{ segment.sejour.reservation_id }}"
+                 style="grid-column: span {{ segment.longueur }}"
+                 title="{{ segment.sejour.nom }}">
+                <span class="truncate">{{ segment.sejour.nom }}</span>
+              </a>
+            {% else %}
+              <div class="min-h-14 bg-paper" style="grid-column: span {{ segment.longueur }}"></div>
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+</section>

@@ -1,0 +1,46 @@
+<section id="sejours" class="space-y-3">
+  <h2 class="text-sm text-mute">Séjours</h2>
+  {% if not fiche.sejours %}
+    <p class="text-sm text-mute">Aucun séjour</p>
+  {% endif %}
+  {% for sejour in fiche.sejours %}
+    <p class="text-sm">
+      {{ sejour.chambre_nom }}
+      <span class="text-mute">· {{ sejour.date_debut|date_fr }} → {{ sejour.date_fin|date_fr }}{% if sejour.nom_client %} · {{ sejour.nom_client }}{% endif %}</span>
+    </p>
+  {% endfor %}
+  {% if not fiche.annulee %}
+    <div class="pt-6">
+      <h2 class="text-sm text-mute">Ajouter un séjour</h2>
+      {% if not chambres %}
+        <p class="mt-3 text-sm text-mute">Ajoutez une chambre avant un séjour. <a class="lien" href="/chambres">Aller aux chambres</a></p>
+      {% else %}
+        <form class="mt-4 space-y-4" method="post" action="/reservations/{{ fiche.id }}/sejours" hx-post="/reservations/{{ fiche.id }}/sejours" hx-target="#sejours" hx-swap="outerHTML">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <label class="libelle max-w-xs">Chambre
+            <select class="champ" name="chambre_id">
+              {% for choix in chambres %}
+                <option value="{{ choix.id }}" {% if chambre_id|string == choix.id|string %}selected{% endif %}>{{ choix.libelle }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="libelle max-w-md">Nom sur le séjour, si différent
+            <input class="champ" name="nom_client" value="{{ nom_client }}" maxlength="200">
+          </label>
+          <div class="flex flex-wrap gap-4">
+            <label class="libelle">Arrivée
+              <input class="champ" name="date_debut" type="date" value="{{ date_debut }}" required>
+            </label>
+            <label class="libelle">Départ
+              <input class="champ" name="date_fin" type="date" value="{{ date_fin }}" required>
+            </label>
+          </div>
+          {% if erreur %}<p class="text-sm text-danger">{{ erreur }}</p>{% endif %}
+          <button class="btn" type="submit">Enregistrer le séjour</button>
+        </form>
+      {% endif %}
+    </div>
+  {% elif erreur %}
+    <p class="text-sm text-danger">{{ erreur }}</p>
+  {% endif %}
+</section>

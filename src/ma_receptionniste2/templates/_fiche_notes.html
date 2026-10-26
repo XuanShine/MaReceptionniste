@@ -1,0 +1,20 @@
+<section id="notes" class="space-y-3">
+  <h2 class="text-sm text-mute">Notes</h2>
+  {% if not fiche.notes %}
+    <p class="text-sm text-mute">Aucune note</p>
+  {% endif %}
+  {% for note in fiche.notes %}
+    <article>
+      <p class="text-xs text-mute">{{ note.date|instant_fr }}{% if note.auteur %} · {{ note.auteur }}{% endif %}</p>
+      <p class="mt-1 whitespace-pre-wrap text-sm">{{ note.description }}</p>
+    </article>
+  {% endfor %}
+  <form class="space-y-4 pt-6" method="post" action="/reservations/{{ fiche.id }}/notes" hx-post="/reservations/{{ fiche.id }}/notes" hx-target="#notes" hx-swap="outerHTML">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="libelle max-w-xl">Note
+      <textarea class="champ" name="description" rows="3" maxlength="4000">{{ description }}</textarea>
+    </label>
+    {% if erreur_note %}<p class="text-sm text-danger">{{ erreur_note }}</p>{% endif %}
+    <button class="btn" type="submit">Ajouter la note</button>
+  </form>
+</section>

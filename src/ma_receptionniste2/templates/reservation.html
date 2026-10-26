@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block titre %}{{ fiche.client }} · Ma réceptionniste{% endblock %}
+{% block contenu %}
+  <a class="lien" href="/reservations">Toutes les réservations</a>
+  {% include "_fiche.html" %}
+{% endblock %}

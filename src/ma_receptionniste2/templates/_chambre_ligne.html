@@ -1,0 +1,13 @@
+<li id="chambre-{{ chambre.id }}" class="flex flex-wrap items-center justify-between gap-4 py-3">
+  <div>
+    <p class="text-sm">
+      <span class="mr-2 inline-block size-1.5 rounded-full {{ 'bg-ready' if chambre.prete else 'bg-wait' }}"></span>
+      {{ chambre.nom }}
+    </p>
+    <p class="mt-1 text-xs text-mute">Position {{ chambre.position }} · {{ chambre.etat_label }}</p>
+  </div>
+  <form method="post" action="/chambres/{{ chambre.id }}/etat" hx-post="/chambres/{{ chambre.id }}/etat" hx-target="#chambre-{{ chambre.id }}" hx-swap="outerHTML">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn-quiet" type="submit">{{ "Marquer non prête" if chambre.prete else "Marquer prête" }}</button>
+  </form>
+</li>

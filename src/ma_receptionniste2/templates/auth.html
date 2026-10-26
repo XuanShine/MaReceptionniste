@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titre %}Ma réceptionniste{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="bg-paper text-ink antialiased">
+  <main id="ecran" class="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center px-6 py-16">
+    {% block contenu %}{% endblock %}
+  </main>
+  <script src="/static/htmx.min.js"></script>
+</body>
+</html>

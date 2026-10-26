@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titre %}Ma réceptionniste{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="min-h-screen bg-paper text-ink antialiased">
+  <a class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-20 focus:bg-paper focus:px-3 focus:py-2" href="#contenu">Aller au contenu</a>
+  <header class="sticky top-0 z-10 border-b border-line bg-paper">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 py-3">
+      <a class="text-sm tracking-wide" href="/">Ma réceptionniste</a>
+      <nav class="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+        {% for href, label in liens %}
+          <a class="{{ 'text-ink underline decoration-ink underline-offset-8' if actif == href else 'text-mute hover:text-ink' }}" href="{{ href }}">{{ label }}</a>
+        {% endfor %}
+      </nav>
+      <div class="flex items-center gap-4 text-sm">
+        <span class="text-mute">{{ nom_utilisateur }}</span>
+        <form method="post" action="/logout">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="text-mute hover:text-ink" type="submit">Déconnexion</button>
+        </form>
+      </div>
+    </div>
+  </header>
+  <main id="contenu" class="mx-auto max-w-6xl px-6 py-8">
+    {% block contenu %}{% endblock %}
+  </main>
+  <script src="/static/htmx.min.js"></script>
+</body>
+</html>

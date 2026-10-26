@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .libelle {
+    @apply block text-xs text-mute;
+  }
+  .champ {
+    @apply mt-1 w-full border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink;
+  }
+  .btn {
+    @apply border border-ink bg-ink px-3 py-2 text-sm text-paper hover:bg-ink/90;
+  }
+  .btn-quiet {
+    @apply border border-line bg-paper px-3 py-2 text-sm hover:border-ink;
+  }
+  .btn-danger {
+    @apply border border-danger/40 px-3 py-2 text-sm text-danger hover:border-danger;
+  }
+  .lien {
+    @apply underline decoration-line underline-offset-4 hover:decoration-ink;
+  }
+}
+
+.htmx-request {
+  opacity: 0.55;
+}

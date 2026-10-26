@@ -172,6 +172,7 @@ async def fiche(reservation_id: int) -> None:
             ui.navigate.to("/")
 
     async def partir() -> None:
+        fermer_reservation()
         ui.navigate.to("/")
 
     async def abandonner() -> None:

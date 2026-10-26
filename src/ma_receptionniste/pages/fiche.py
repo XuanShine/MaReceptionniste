@@ -442,6 +442,7 @@ async def fiche(reservation_id: int) -> None:
                             prix_unitaire = _champ_euros("PU TTC").classes("w-36")
                             ui.button("Ajouter", icon="add", on_click=ajouter_une_consommation)
                     with ui.tab_panel("reglements").classes("p-0"):
+                        totaux()
                         reglements()
                         with _barre_saisie():
                             mode = ui.select(OPTIONS_MODES, label="Mode", value=ModeReglement.carte.value).classes(
@@ -456,7 +457,6 @@ async def fiche(reservation_id: int) -> None:
                             note = ui.input("Ajouter une note au journal").classes("flex-1").on("keydown.enter", noter)
                             ui.button("Ajouter la note", icon="edit_note", on_click=noter)
                         historique()
-            totaux()
             with ui.row().classes(
                 "w-full items-center gap-2 px-6 py-3 bg-white border-t border-slate-200 rounded-b-lg "
                 "sticky bottom-0 z-10 no-wrap"
@@ -658,7 +658,7 @@ def _barre_saisie(haut: bool = False) -> ui.row:
 def _totaux(totaux: Totaux) -> None:
     couleur = "negative" if totaux.solde > 0 else "positive" if totaux.solde == 0 else "warning"
     with ui.row().classes(
-        "w-full justify-end items-center gap-8 px-6 py-3 border-t border-slate-200 bg-slate-50 no-wrap"
+        "w-full justify-end items-center gap-8 px-6 py-3 border-b border-slate-200 bg-slate-50 no-wrap"
     ):
         _montant("Hébergement", totaux.hebergement)
         _montant("Taxe de séjour", totaux.taxe_sejour)

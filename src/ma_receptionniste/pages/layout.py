@@ -9,12 +9,32 @@ from ma_receptionniste.consultations import options_clients
 from ma_receptionniste.pages.theme import date_longue
 from ma_receptionniste.saisie import creer_reservation
 
-NAVIGATION = (
-    ("/", "Planning", "calendar_month"),
-    ("/reservations", "Réservations", "book_online"),
-    ("/clients", "Clients", "people"),
-    ("/chambres", "Chambres", "bed"),
-)
+RESERVATION_OUVERTE = "reservation_ouverte"
+ACTIF_DETAIL = "detail"
+
+
+def ouvrir_reservation(reservation_id: int) -> None:
+    app.storage.user[RESERVATION_OUVERTE] = reservation_id
+
+
+def fermer_reservation() -> None:
+    app.storage.user.pop(RESERVATION_OUVERTE, None)
+
+
+def _entrees() -> tuple[tuple[str | None, str, str, str], ...]:
+    ouverte = app.storage.user.get(RESERVATION_OUVERTE)
+    return (
+        ("/", "Planning", "calendar_month", "/"),
+        ("/reservations", "Réservations", "book_online", "/reservations"),
+        (
+            f"/reservations/{ouverte}" if ouverte else None,
+            "Détail Réservation",
+            "description",
+            ACTIF_DETAIL,
+        ),
+        ("/clients", "Clients", "people", "/clients"),
+        ("/chambres", "Chambres", "bed", "/chambres"),
+    )
 
 
 @contextmanager
@@ -61,19 +81,8 @@ def _menu(actif: str) -> None:
             ui.label("Hôtel Panorama").classes("text-lg font-semibold text-primary leading-tight")
             ui.label("Ma Réceptionniste").classes("text-xs text-ardoise tracking-wide")
         with ui.column().classes("w-full gap-1 px-3"):
-            for cible, libelle, icone in NAVIGATION:
-                courant = cible == actif
-                with ui.link(target=cible).classes(
-                    "w-full flex items-center gap-3 rounded-md px-3 py-2 text-sm no-underline transition-colors "
-                    + (
-                        "bg-primary-soft text-primary font-semibold"
-                        if courant
-                        else "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    )
-                ):
-                    ui.element("div").classes("w-[3px] h-4 -ml-3 rounded-r " + ("bg-primary" if courant else ""))
-                    ui.icon(icone, size="1.25rem")
-                    ui.label(libelle)
+            for cible, libelle, icone, cle in _entrees():
+                _entree_menu(cible, libelle, icone, courant=cle == actif)
         ui.space()
         with ui.row().classes("w-full items-center gap-2 px-4 py-3 border-t border-slate-200 no-wrap"):
             ui.avatar(_initiales(nom), color="primary-soft", text_color="primary", size="2rem").classes("text-xs")
@@ -81,6 +90,21 @@ def _menu(actif: str) -> None:
             ui.button(icon="logout", on_click=deconnexion).props("flat round dense color=ardoise").tooltip(
                 "Se déconnecter"
             )
+
+
+def _entree_menu(cible: str | None, libelle: str, icone: str, *, courant: bool) -> None:
+    if cible is None:
+        style = "text-slate-300 cursor-default"
+    elif courant:
+        style = "bg-primary-soft text-primary font-semibold"
+    else:
+        style = "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+    classes = f"w-full flex items-center gap-3 rounded-md px-3 py-2 text-sm no-underline transition-colors {style}"
+    conteneur = ui.element("div").classes(classes) if cible is None else ui.link(target=cible).classes(classes)
+    with conteneur:
+        ui.element("div").classes("w-[3px] h-4 -ml-3 rounded-r " + ("bg-primary" if courant else ""))
+        ui.icon(icone, size="1.25rem")
+        ui.label(libelle)
 
 
 def _dialogue_nouvelle_reservation():

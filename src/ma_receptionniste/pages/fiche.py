@@ -14,7 +14,7 @@ from ma_receptionniste.consultations import (
 from ma_receptionniste.facturation import Totaux, centimes, format_euros, montant_ligne, nuits, taxe_sejour
 from ma_receptionniste.models import Client, ModeReglement, Reservation, StatutReservation
 from ma_receptionniste.pages.clients import PAYS_COURANTS
-from ma_receptionniste.pages.layout import badge, etat_vide, page
+from ma_receptionniste.pages.layout import ACTIF_DETAIL, badge, etat_vide, fermer_reservation, ouvrir_reservation, page
 from ma_receptionniste.pages.theme import date_courte, date_heure, heure_locale
 from ma_receptionniste.saisie import (
     CHAMPS_FICHE,
@@ -121,6 +121,7 @@ class BrouillonLigne:
 async def fiche(reservation_id: int) -> None:
     donnees = await run.io_bound(fiche_sejour, reservation_id)
     if donnees is None:
+        fermer_reservation()
         with page("/reservations", "Fiche séjour"):
             etat_vide(
                 "search_off",
@@ -129,6 +130,7 @@ async def fiche(reservation_id: int) -> None:
                 "/reservations",
             )
         return
+    ouvrir_reservation(reservation_id)
     user_id = app.storage.user.get("user_id")
     enregistre = _champs(donnees)
     valeurs = {cle: "" if valeur is None else valeur for cle, valeur in enregistre.items()}
@@ -166,6 +168,7 @@ async def fiche(reservation_id: int) -> None:
 
     async def valider() -> None:
         if await enregistrer_haut() is not None:
+            fermer_reservation()
             ui.navigate.to("/")
 
     async def partir() -> None:
@@ -306,7 +309,7 @@ async def fiche(reservation_id: int) -> None:
     ui.on("fiche-confirmer", confirmer)
     ui.on("fiche-abandon", abandonner)
 
-    with page("/reservations", "Fiche séjour"):
+    with page(ACTIF_DETAIL, "Fiche séjour"):
         ouvrir_ligne = _dialogue_ligne(user_id, recharger)
         confirmation_annulation = _confirmation(
             "Annuler la réservation ?",

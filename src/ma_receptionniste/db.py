@@ -62,6 +62,7 @@ def ajouter_colonnes_manquantes(engine: Engine) -> list[str]:
             definition = CreateColumn(colonne).compile(dialect=engine.dialect)
             connexion.exec_driver_sql(f"ALTER TABLE {nom_table} ADD COLUMN {definition}")
         _reprendre_valeurs_anciennes(connexion, set(ajoutees))
+        _retirer_colonnes_remplacees(connexion)
     return ajoutees
 
 
@@ -83,6 +84,28 @@ def _reprendre_valeurs_anciennes(connexion, ajoutees: set[str]) -> None:
         connexion.exec_driver_sql("UPDATE reglement SET mode = 'carte' WHERE mode = 'CB'")
     if "reglement.date" in ajoutees and _a_colonne(connexion, "reglement", "jour"):
         connexion.exec_driver_sql("UPDATE reglement SET date = date(jour) || ' 00:00:00' WHERE jour IS NOT NULL")
+
+
+def _retirer_colonnes_remplacees(connexion) -> None:
+    """Ces colonnes ne sont plus dans le modèle. NOT NULL les fait rejeter tout INSERT qui ne les nomme pas."""
+    if _a_colonne(connexion, "reglement", "jour") and _a_colonne(connexion, "reglement", "date"):
+        connexion.exec_driver_sql(
+            "UPDATE reglement SET date = date(jour) || ' 00:00:00' "
+            "WHERE jour IS NOT NULL AND date = '1970-01-01 00:00:00'"
+        )
+    if _a_colonne(connexion, "consommation", "jour") and _a_colonne(connexion, "consommation", "date"):
+        connexion.exec_driver_sql(
+            "UPDATE consommation SET date = date(jour) || ' 00:00:00' "
+            "WHERE jour IS NOT NULL AND date = '1970-01-01 00:00:00'"
+        )
+    remplacees = (
+        ("reglement", "montant", "montant_centimes"),
+        ("reglement", "jour", "date"),
+        ("consommation", "jour", "date"),
+    )
+    for table, ancienne, nouvelle in remplacees:
+        if _a_colonne(connexion, table, ancienne) and _a_colonne(connexion, table, nouvelle):
+            connexion.exec_driver_sql(f"ALTER TABLE {table} DROP COLUMN {ancienne}")
 
 
 @contextmanager

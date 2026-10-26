@@ -179,6 +179,12 @@ def charger_planning(debut: date, fin: date) -> dict:
         return planning(session, debut, fin)
 
 
+def charger_resume() -> ResumeJour:
+    aujourd_hui = date.today()
+    with get_session() as session:
+        return planning(session, aujourd_hui, aujourd_hui)["resume"]
+
+
 def lister_chambres() -> list[dict]:
     with get_session() as session:
         chambres = session.exec(select(Chambre).order_by(Chambre.position, Chambre.nom)).all()

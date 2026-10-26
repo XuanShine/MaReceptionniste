@@ -24,6 +24,7 @@ def fermer_reservation() -> None:
 def _entrees() -> tuple[tuple[str | None, str, str, str], ...]:
     ouverte = app.storage.user.get(RESERVATION_OUVERTE)
     return (
+        ("/dashboard", "Dashboard", "dashboard", "/dashboard"),
         ("/", "Planning", "calendar_month", "/"),
         ("/reservations", "Réservations", "book_online", "/reservations"),
         (

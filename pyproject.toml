@@ -1,7 +1,7 @@
 [project]
 name = "ma-receptionniste"
 version = "0.1.0"
-description = "Application de réception (NiceGUI + SQLModel)"
+description = "Application de réception (NiceGUI, et la réécriture FastAPI + HTMX)"
 readme = "README.md"
 authors = [
     { name = "XuanShine", email = "xuan.ng@hotmail.com" }
@@ -10,10 +10,15 @@ requires-python = ">=3.12"
 dependencies = [
     "nicegui>=3.18.0",
     "sqlmodel>=0.0.48",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.12",
 ]
 
 [project.scripts]
 ma-receptionniste = "ma_receptionniste:main"
+ma-receptionniste2 = "ma_receptionniste2:main"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]
@@ -23,6 +28,7 @@ build-backend = "uv_build"
 dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.1",
+    "httpx>=0.27.0",
 ]
 
 [tool.ruff]

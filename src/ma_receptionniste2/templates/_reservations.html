@@ -1,0 +1,38 @@
+<h1 class="text-xl font-medium">Réservations</h1>
+{% if not clients %}
+  <p class="mt-8 text-sm text-mute">Ajoutez un client avant de créer une réservation. <a class="lien" href="/clients">Aller aux clients</a></p>
+{% else %}
+  <form class="mt-8 flex flex-wrap items-end gap-3" method="post" action="/reservations" hx-post="/reservations" hx-target="#panneau" hx-swap="innerHTML">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="libelle w-72">Client
+      <select class="champ" name="client_id">
+        {% for choix in clients %}
+          <option value="{{ choix.id }}" {% if client_id|string == choix.id|string %}selected{% endif %}>{{ choix.libelle }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn" type="submit">Créer</button>
+  </form>
+{% endif %}
+{% if erreur %}<p class="mt-4 text-sm text-danger">{{ erreur }}</p>{% endif %}
+{% if not reservations %}
+  <p class="mt-10 text-sm text-mute">Aucune réservation.</p>
+{% else %}
+  <ul class="mt-10 divide-y divide-line border-y border-line">
+    {% for reservation in reservations %}
+      <li class="py-4">
+        <a class="text-sm hover:underline" href="/reservations/{{ reservation.id }}">{{ reservation.client }}</a>
+        <span class="ml-3 text-sm text-mute">{{ reservation.statut_label }}</span>
+        {% if not reservation.sejours %}
+          <p class="mt-1 text-sm text-mute">Aucun séjour</p>
+        {% endif %}
+        {% for sejour in reservation.sejours %}
+          <p class="mt-1 text-sm text-mute">
+            {{ sejour.chambre_nom }} · {{ sejour.date_debut|date_fr }} → {{ sejour.date_fin|date_fr }}
+            {% if sejour.nom_client %} · {{ sejour.nom_client }}{% endif %}
+          </p>
+        {% endfor %}
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}

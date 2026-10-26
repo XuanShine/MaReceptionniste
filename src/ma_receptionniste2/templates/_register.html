@@ -1,0 +1,20 @@
+<p class="text-sm tracking-wide">Ma réceptionniste</p>
+<h1 class="mt-6 text-xl font-medium">Créer un compte</h1>
+<form class="mt-8 space-y-4" method="post" action="/register" hx-post="/register" hx-target="#ecran" hx-swap="innerHTML">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if erreur %}<p class="text-sm text-danger">{{ erreur }}</p>{% endif %}
+  <label class="libelle">Nom
+    <input class="champ" name="nom" autocomplete="name" value="{{ nom }}" maxlength="200" required>
+  </label>
+  <label class="libelle">Email
+    <input class="champ" name="email" type="email" autocomplete="email" value="{{ email }}" required>
+  </label>
+  <label class="libelle">Mot de passe
+    <input class="champ" name="password" type="password" autocomplete="new-password" minlength="4" maxlength="128" required>
+  </label>
+  <label class="libelle">Confirmer le mot de passe
+    <input class="champ" name="confirmation" type="password" autocomplete="new-password" minlength="4" maxlength="128" required>
+  </label>
+  <button class="btn w-full" type="submit">S'inscrire</button>
+</form>
+<p class="mt-6 text-sm text-mute"><a class="lien" href="/login">Déjà un compte ? Se connecter</a></p>

@@ -1,0 +1,56 @@
+<h1 class="text-xl font-medium">Clients</h1>
+<form class="mt-8 grid gap-4 sm:grid-cols-2" method="post" action="/clients" hx-post="/clients" hx-target="#panneau" hx-swap="innerHTML">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="libelle">Nom
+    <input class="champ" name="nom" value="{{ nom }}" maxlength="200" required>
+  </label>
+  <label class="libelle">Prénom
+    <input class="champ" name="prenom" value="{{ prenom }}" maxlength="200">
+  </label>
+  <label class="libelle">Email
+    <input class="champ" name="email" value="{{ email }}" maxlength="200">
+  </label>
+  <label class="libelle">Téléphone
+    <input class="champ" name="telephone" value="{{ telephone }}" maxlength="200">
+  </label>
+  <label class="libelle sm:col-span-2">Adresse
+    <input class="champ" name="adresse" value="{{ adresse }}" maxlength="4000">
+  </label>
+  <label class="libelle sm:col-span-2">Notes
+    <textarea class="champ" name="notes" rows="3" maxlength="4000">{{ notes }}</textarea>
+  </label>
+  {% if erreur %}<p class="text-sm text-danger sm:col-span-2">{{ erreur }}</p>{% endif %}
+  <div class="sm:col-span-2">
+    <button class="btn" type="submit">Ajouter</button>
+  </div>
+</form>
+{% if not clients %}
+  <p class="mt-10 text-sm text-mute">Aucun client.</p>
+{% else %}
+  <div class="mt-10 overflow-x-auto">
+    <table class="w-full text-left text-sm">
+      <thead class="border-b border-line text-xs text-mute">
+        <tr>
+          <th class="py-2 pr-4 font-normal">Nom</th>
+          <th class="py-2 pr-4 font-normal">Prénom</th>
+          <th class="py-2 pr-4 font-normal">Email</th>
+          <th class="py-2 pr-4 font-normal">Téléphone</th>
+          <th class="py-2 pr-4 font-normal">Adresse</th>
+          <th class="py-2 font-normal">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for client in clients %}
+          <tr class="border-b border-line align-top">
+            <td class="py-3 pr-4">{{ client.nom }}</td>
+            <td class="py-3 pr-4">{{ client.prenom }}</td>
+            <td class="py-3 pr-4">{{ client.email }}</td>
+            <td class="py-3 pr-4">{{ client.telephone }}</td>
+            <td class="py-3 pr-4">{{ client.adresse }}</td>
+            <td class="py-3 whitespace-pre-wrap">{{ client.notes }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}

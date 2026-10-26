@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block titre %}Planning · Ma réceptionniste{% endblock %}
+{% block contenu %}
+  <h1 class="text-xl font-medium">Planning</h1>
+  <div class="mt-8">
+    {% include "_semaine.html" %}
+  </div>
+{% endblock %}

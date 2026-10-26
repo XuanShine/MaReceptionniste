@@ -157,6 +157,12 @@ def test_ancienne_base_reprend_les_montants_en_euros() -> None:
             (ModeReglement.carte, 5000, date(2026, 10, 19)),
             (ModeReglement.carte, 200, date(2026, 10, 19)),
         ]
+        session.add(Reglement(reservation_id=1, mode=ModeReglement.carte, montant_centimes=10400))
+        session.add(Consommation(reservation_id=1, libelle="Bar", quantite=1, prix_unitaire_centimes=300))
+        session.commit()
+        montants = [r.montant_centimes for r in session.exec(select(Reglement).order_by(Reglement.id))]
+        assert montants == [5000, 200, 10400]
+        assert session.exec(select(Consommation)).one().prix_unitaire_centimes == 300
         session.get(Sejour, 1).prix_nuit_centimes = 100
         session.commit()
 

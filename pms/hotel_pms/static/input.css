@@ -148,6 +148,17 @@
 .sheet-table tbody tr:hover {
   background: #fffbeb;
 }
+#panneau-reglements .sheet-table {
+  table-layout: fixed;
+}
+#panneau-reglements .col-actions { width: 9.5rem; }
+#panneau-reglements .col-date { width: 11rem; }
+#panneau-reglements .col-montant { width: 8rem; }
+#panneau-reglements .ligne-saisie select,
+#panneau-reglements .ligne-saisie input {
+  min-width: 0;
+  max-width: 100%;
+}
 
 .planning-table {
   width: 100%;

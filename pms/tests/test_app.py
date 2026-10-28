@@ -106,6 +106,21 @@ def test_menu_puis_fiche_monnier(client):
         "Abandon",
     ):
         assert attendu in page
+    reservations = fiche.text.split('id="panneau-reservations"', 1)[1].split('id="panneau-consommations"', 1)[0]
+    assert ">Note</th>" not in reservations
+    premier_entete = re.search(r"<th\b[^>]*>([^<]*)</th>", reservations)
+    assert premier_entete is not None
+    assert premier_entete.group(1).strip() == "Type"
+    hors_modele = re.sub(r"<template\b[^>]*>.*?</template>", "", reservations, count=1, flags=re.S)
+    lignes = [
+        corps
+        for corps in re.findall(r"<tr>(.*?)</tr>", hors_modele, flags=re.S)
+        if "<td" in corps and "colspan" not in corps
+    ]
+    assert lignes
+    assert all(len(re.findall(r"<td\b", corps)) == 10 for corps in lignes)
+    reglements_panneau = fiche.text.split('id="panneau-reglements"', 1)[1].split('id="panneau-modifications"', 1)[0]
+    assert ">Note</th>" in reglements_panneau
     assert 'id="compte-reservations">(1)</span>' in fiche.text
     assert 'id="compte-reglements">(2)</span>' in fiche.text
     assert 'id="compte-modifications">(8)</span>' in fiche.text
@@ -393,6 +408,8 @@ def test_ajout_ligne_dans_la_grille(client):
     )
     assert "Vérifiez les dates, le prix et la chambre." in invalide.text
     assert 'class="ligne-saisie"' in invalide.text
+    assert "Enregistrer" in invalide.text
+    assert 'name="type_chambre"' in invalide.text
     assert 'value="Suite"' in invalide.text
     assert 'value="2026-11-10"' in invalide.text
 

@@ -1,12 +1,14 @@
 <tr class="ligne-saisie">
-  <td class="ligne-actions">
+  <td>
     <form data-form id="ligne-brouillon" method="post" action="/sejours/{{ sejour.id }}/lignes" hx-post="/sejours/{{ sejour.id }}/lignes" hx-target="#panneau-reservations" hx-swap="outerHTML">
       <input type="hidden" name="csrf" value="{{ csrf }}">
     </form>
-    <button class="cell-ok" type="submit" data-form form="ligne-brouillon">Enregistrer</button>
-    <button class="cell-x" type="button" data-retirer-ligne aria-label="Retirer la ligne">×</button>
+    <div class="ligne-actions">
+      <button class="cell-ok" type="submit" data-form form="ligne-brouillon">Enregistrer</button>
+      <button class="cell-x" type="button" data-retirer-ligne aria-label="Retirer la ligne">×</button>
+    </div>
+    <input data-form form="ligne-brouillon" name="type_chambre" value="{{ brouillon.type_chambre }}" maxlength="40" aria-label="Type" autocomplete="off">
   </td>
-  <td><input data-form form="ligne-brouillon" name="type_chambre" value="{{ brouillon.type_chambre }}" maxlength="40" aria-label="Type" autocomplete="off"></td>
   <td>
     <select data-form form="ligne-brouillon" name="chambre_id" aria-label="Chambre" required>
       <option value="">—</option>

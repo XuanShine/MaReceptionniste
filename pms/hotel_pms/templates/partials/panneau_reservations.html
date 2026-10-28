@@ -6,6 +6,21 @@
   {% if erreur_ligne %}
   <p class="px-3 py-2 text-sm text-red-700" role="alert">{{ erreur_ligne }}</p>
   {% endif %}
+  {% set vide = {
+    'type_chambre': '',
+    'chambre_id': '',
+    'date_debut': '',
+    'date_fin': '',
+    'prix_ttc': '',
+    'remise_pct': '0',
+    'adultes': '2',
+    'enfants': '0',
+    'taxe_sejour': '0',
+    'nuits': ''
+  } %}
+  <template id="modele-ligne">
+    {% with brouillon=vide %}{% include "partials/ligne_saisie.html" %}{% endwith %}
+  </template>
   <div class="overflow-x-auto">
     <table class="sheet-table">
       <thead>
@@ -43,12 +58,12 @@
           <td class="num">{{ ligne.taxe_sejour|euro }}</td>
         </tr>
         {% endfor %}
+        {% if brouillon_ligne %}
+        {% with brouillon=brouillon_ligne %}{% include "partials/ligne_saisie.html" %}{% endwith %}
+        {% endif %}
         <tr>
           <td colspan="11">
-            <details {% if erreur_ligne %}open{% endif %}>
-              <summary class="cursor-pointer py-1 text-center text-sm text-slate-400">Cliquez ici pour ajouter une nouvelle ligne</summary>
-              {% include "partials/form_ligne.html" %}
-            </details>
+            <button type="button" class="ajout-ligne" data-ajout-ligne>Cliquez ici pour ajouter une nouvelle ligne</button>
           </td>
         </tr>
       </tbody>

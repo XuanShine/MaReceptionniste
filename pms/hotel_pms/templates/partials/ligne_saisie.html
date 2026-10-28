@@ -1,0 +1,26 @@
+<tr class="ligne-saisie">
+  <td class="ligne-actions">
+    <form data-form id="ligne-brouillon" method="post" action="/sejours/{{ sejour.id }}/lignes" hx-post="/sejours/{{ sejour.id }}/lignes" hx-target="#panneau-reservations" hx-swap="outerHTML">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+    </form>
+    <button class="cell-ok" type="submit" data-form form="ligne-brouillon">Enregistrer</button>
+    <button class="cell-x" type="button" data-retirer-ligne aria-label="Retirer la ligne">×</button>
+  </td>
+  <td><input data-form form="ligne-brouillon" name="type_chambre" value="{{ brouillon.type_chambre }}" maxlength="40" aria-label="Type" autocomplete="off"></td>
+  <td>
+    <select data-form form="ligne-brouillon" name="chambre_id" aria-label="Chambre" required>
+      <option value="">—</option>
+      {% for chambre in chambres %}
+      <option value="{{ chambre.id }}" {% if brouillon.chambre_id == (chambre.id|string) %}selected{% endif %}>{{ chambre.numero }}</option>
+      {% endfor %}
+    </select>
+  </td>
+  <td class="num"><span data-role="nuits">{{ brouillon.nuits or "—" }}</span></td>
+  <td><input data-form form="ligne-brouillon" type="date" name="date_debut" required value="{{ brouillon.date_debut }}" aria-label="Début"></td>
+  <td><input data-form form="ligne-brouillon" type="date" name="date_fin" required value="{{ brouillon.date_fin }}" aria-label="Fin"></td>
+  <td><input data-form form="ligne-brouillon" name="prix_ttc" required inputmode="decimal" value="{{ brouillon.prix_ttc }}" placeholder="0,00" aria-label="Prix TTC avant remise" autocomplete="off"></td>
+  <td><input data-form form="ligne-brouillon" name="remise_pct" inputmode="decimal" value="{{ brouillon.remise_pct }}" aria-label="Remise %" autocomplete="off"></td>
+  <td><input data-form form="ligne-brouillon" name="adultes" inputmode="numeric" value="{{ brouillon.adultes }}" aria-label="Adulte" autocomplete="off"></td>
+  <td><input data-form form="ligne-brouillon" name="enfants" inputmode="numeric" value="{{ brouillon.enfants }}" aria-label="Enfant" autocomplete="off"></td>
+  <td><input data-form form="ligne-brouillon" name="taxe_sejour" inputmode="decimal" value="{{ brouillon.taxe_sejour }}" aria-label="Taxe de séjour" autocomplete="off"></td>
+</tr>

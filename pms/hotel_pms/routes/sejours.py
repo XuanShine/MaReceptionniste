@@ -74,6 +74,7 @@ def _fiche(request: Request, session: Session, sejour: Sejour, onglet: str, bloc
         bloc=bloc,
         erreur_ligne=None,
         erreur_reglement=None,
+        brouillon_ligne=None,
         **_contexte_fiche(session, sejour),
     )
 
@@ -277,8 +278,19 @@ def ajouter_ligne(
             taxe_sejour=taxe_sejour,
         )
         if erreur or ligne is None:
+            brouillon = _brouillon_ligne(
+                type_chambre=type_chambre,
+                chambre_id=chambre_id,
+                date_debut=date_debut,
+                date_fin=date_fin,
+                prix_ttc=prix_ttc,
+                remise_pct=remise_pct,
+                adultes=adultes,
+                enfants=enfants,
+                taxe_sejour=taxe_sejour,
+            )
             if est_htmx(request):
-                return _panneau_reservations(request, session, sejour, erreur or "Ligne invalide.")
+                return _panneau_reservations(request, session, sejour, erreur or "Ligne invalide.", brouillon)
             flash(request, erreur or "Ligne invalide.")
             return _rediriger(f"/sejours/{sejour.id}?onglet=reservations")
         ligne.sejour_id = sejour.id
@@ -298,11 +310,18 @@ def ajouter_ligne(
         return _rediriger(f"/sejours/{sejour.id}?onglet=reservations")
 
 
-def _panneau_reservations(request: Request, session: Session, sejour: Sejour, erreur: str | None):
+def _panneau_reservations(
+    request: Request,
+    session: Session,
+    sejour: Sejour,
+    erreur: str | None,
+    brouillon: dict | None = None,
+):
     return fragment(
         request,
         "partials/panneau_reservations.html",
         erreur_ligne=erreur,
+        brouillon_ligne=brouillon,
         **_contexte_fiche(session, sejour, oob=True, onglet="reservations"),
     )
 
@@ -365,6 +384,29 @@ def _prochain_numero(session: Session) -> str:
         except ValueError:
             continue
     return f"{prefixe}{suivant:04d}"
+
+
+def _brouillon_ligne(**champs) -> dict[str, str]:
+    nuits = ""
+    try:
+        debut = date.fromisoformat(champs["date_debut"])
+        fin = date.fromisoformat(champs["date_fin"])
+    except ValueError:
+        debut = fin = None
+    if debut is not None and fin is not None and fin > debut:
+        nuits = str((fin - debut).days)
+    return {
+        "type_chambre": champs["type_chambre"],
+        "chambre_id": champs["chambre_id"],
+        "date_debut": champs["date_debut"],
+        "date_fin": champs["date_fin"],
+        "prix_ttc": champs["prix_ttc"],
+        "remise_pct": champs["remise_pct"],
+        "adultes": champs["adultes"],
+        "enfants": champs["enfants"],
+        "taxe_sejour": champs["taxe_sejour"],
+        "nuits": nuits,
+    }
 
 
 def _lire_ligne(session: Session, **champs) -> tuple[str | None, LigneReservation | None]:

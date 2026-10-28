@@ -3,7 +3,7 @@ from html import unescape
 from pathlib import Path
 
 from hotel_pms.auth import verifier_mot_de_passe
-from hotel_pms.models import Sejour, User
+from hotel_pms.models import Chambre, Sejour, User
 from hotel_pms.seed import JOURNAL_MONNIER, NOTES_MONNIER
 from sqlalchemy import inspect
 from sqlmodel import Session, select
@@ -194,9 +194,17 @@ def test_abandon_desactive_le_menu(client):
 
 def test_planning_listes_et_logout(client):
     login(client)
-    planning = client.get("/planning?debut=2026-10-25")
-    assert "Monnier Christophe" in planning.text
-    assert "308" in planning.text
+    planning = client.get("/planning?debut=2026-10-25").text
+    assert planning.count("Monnier Christophe") == 1
+    assert planning.count("Bernard Alain") == 1
+    assert planning.count("Martin Sophie") == 1
+    assert "308" in planning
+    with Session(client.app.state.engine) as session:
+        bernard = session.exec(select(Sejour).where(Sejour.nom == "Bernard Alain")).one()
+        monnier = session.exec(select(Sejour).where(Sejour.nom == "Monnier Christophe")).one()
+    assert f'data-span="2" data-nuits="2" href="/sejours/{bernard.id}"' in planning
+    assert f'data-span="1" data-nuits="1" href="/sejours/{monnier.id}"' in planning
+    assert "2 nuits" in planning
     assert "Bernard Alain" in client.get("/sejours").text
     assert "Martin Sophie" in client.get("/sejours").text
     assert "Traité" in client.get("/sejours").text
@@ -219,3 +227,62 @@ def test_planning_listes_et_logout(client):
     assert sortie.headers["location"] == "/login"
     bloque = client.get("/sejours", follow_redirects=False)
     assert bloque.status_code == 303
+
+
+def test_ajout_ligne_dans_la_grille(client):
+    login(client)
+    sid = id_monnier(client.app)
+    page = client.get(f"/sejours/{sid}").text
+    assert 'data-ajout-ligne' in page
+    assert 'id="modele-ligne"' in page
+    assert "Ajouter la ligne" not in page
+    assert "<details" not in page
+    token = jeton(page)
+    with Session(client.app.state.engine) as session:
+        chambre = session.exec(select(Chambre).where(Chambre.numero == "305")).one()
+        chambre_id = chambre.id
+    reponse = client.post(
+        f"/sejours/{sid}/lignes",
+        data={
+            "csrf": token,
+            "type_chambre": "Suite",
+            "chambre_id": str(chambre_id),
+            "date_debut": "2026-11-02",
+            "date_fin": "2026-11-04",
+            "prix_ttc": "90,00",
+            "remise_pct": "0",
+            "adultes": "1",
+            "enfants": "0",
+            "taxe_sejour": "4,00",
+        },
+        headers={"HX-Request": "true"},
+    )
+    assert reponse.status_code == 200
+    assert 'id="compte-reservations" hx-swap-oob="true">(2)</span>' in reponse.text
+    assert "Suite" in reponse.text
+    assert "02/11/2026" in reponse.text
+    assert "04/11/2026" in reponse.text
+    fiche = client.get(f"/sejours/{sid}").text
+    assert "02/11/2026" in fiche
+    assert "90,00" in fiche
+
+    invalide = client.post(
+        f"/sejours/{sid}/lignes",
+        data={
+            "csrf": token,
+            "type_chambre": "Suite",
+            "chambre_id": "",
+            "date_debut": "2026-11-10",
+            "date_fin": "2026-11-12",
+            "prix_ttc": "40",
+            "remise_pct": "0",
+            "adultes": "1",
+            "enfants": "0",
+            "taxe_sejour": "0",
+        },
+        headers={"HX-Request": "true"},
+    )
+    assert "Vérifiez les dates, le prix et la chambre." in invalide.text
+    assert 'class="ligne-saisie"' in invalide.text
+    assert 'value="Suite"' in invalide.text
+    assert 'value="2026-11-10"' in invalide.text

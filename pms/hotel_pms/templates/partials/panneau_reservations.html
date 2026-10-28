@@ -22,7 +22,6 @@
     <table class="sheet-table">
       <thead>
         <tr>
-          <th rowspan="2">Note</th>
           <th rowspan="2">Type</th>
           <th rowspan="2">Chambre</th>
           <th rowspan="2">Nb. Jour</th>
@@ -45,7 +44,6 @@
         </template>
         {% for ligne in sejour.lignes|sort(attribute='date_debut') %}
         <tr>
-          <td><button type="button" class="expander" tabindex="-1" aria-hidden="true">+</button></td>
           <td>{{ ligne.type_chambre }}</td>
           <td>{{ ligne.chambre.numero if ligne.chambre else "—" }}</td>
           <td class="num">{{ ligne.nb_jours }}</td>
@@ -62,14 +60,14 @@
         {% with brouillon=brouillon_ligne %}{% include "partials/ligne_saisie.html" %}{% endwith %}
         {% endif %}
         <tr>
-          <td colspan="11">
+          <td colspan="10">
             <button type="button" class="ajout-ligne" data-ajout-ligne>Cliquez ici pour ajouter une nouvelle ligne</button>
           </td>
         </tr>
       </tbody>
       <tfoot>
         <tr>
-          <td colspan="10"></td>
+          <td colspan="9"></td>
           <td class="num font-semibold">{{ totaux.total_taxe|euro }}</td>
         </tr>
       </tfoot>

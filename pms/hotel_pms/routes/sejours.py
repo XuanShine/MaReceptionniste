@@ -1,5 +1,6 @@
 """Fiche séjour : en-tête, réservations, règlements."""
 
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
@@ -26,6 +27,42 @@ from hotel_pms.saisie import couper, parser_date, parser_decimal, parser_entier
 from hotel_pms.web import est_htmx, flash, fragment, ouvrir, rendre, verifier_csrf
 
 router = APIRouter()
+
+
+@dataclass(frozen=True)
+class SaisieReglement:
+    date_reglement: str
+    type_reglement: str
+    montant: str
+
+
+@dataclass(frozen=True)
+class ReglementLu:
+    date_reglement: date
+    type_reglement: str
+    montant: Decimal
+
+
+@dataclass(frozen=True)
+class EchecReglement:
+    message: str
+    saisie: SaisieReglement
+
+
+def lire_reglement(saisie: SaisieReglement) -> ReglementLu | EchecReglement:
+    try:
+        jour = parser_date(saisie.date_reglement, obligatoire=True)
+    except ValueError:
+        return EchecReglement("Date invalide.", saisie)
+    if jour is None:
+        return EchecReglement("Date invalide.", saisie)
+    if saisie.type_reglement not in MOYENS_PAIEMENT:
+        return EchecReglement("Moyen de paiement inconnu.", saisie)
+    try:
+        montant = parser_decimal(saisie.montant, Decimal("0.01"), Decimal("1000000"))
+    except ValueError:
+        return EchecReglement("Montant invalide.", saisie)
+    return ReglementLu(date_reglement=jour, type_reglement=saisie.type_reglement, montant=montant)
 
 
 def _onglet(valeur: str | None) -> str:
@@ -67,7 +104,14 @@ def _contexte_fiche(session: Session, sejour: Sejour, **extra):
     }
 
 
-def _fiche(request: Request, session: Session, sejour: Sejour, onglet: str, bloc: str):
+def _fiche(
+    request: Request,
+    session: Session,
+    sejour: Sejour,
+    onglet: str,
+    bloc: str,
+    echec_reglement: EchecReglement | None = None,
+):
     return rendre(
         request,
         "sejour.html",
@@ -76,7 +120,7 @@ def _fiche(request: Request, session: Session, sejour: Sejour, onglet: str, bloc
         onglet=onglet,
         bloc=bloc,
         erreur_ligne=None,
-        erreur_reglement=None,
+        echec_reglement=echec_reglement,
         brouillon_ligne=None,
         brouillon_conso=None,
         **_contexte_fiche(session, sejour),
@@ -211,36 +255,38 @@ def ajouter_reglement(
     request: Request,
     sejour_id: int,
     csrf: str = Form(""),
-    montant: str = Form(""),
+    date_reglement: str = Form(""),
     type_reglement: str = Form(""),
+    montant: str = Form(""),
 ):
     verifier_csrf(request, csrf)
     with ouvrir(request) as session:
         sejour = session.get(Sejour, sejour_id)
         if sejour is None:
             return _rediriger("/sejours")
-        erreur = None
-        if type_reglement not in MOYENS_PAIEMENT:
-            erreur = "Moyen de paiement inconnu."
-        else:
-            try:
-                valeur = parser_decimal(montant, Decimal("0.01"), Decimal("1000000"))
-            except ValueError:
-                erreur = "Montant invalide."
-        if erreur:
+        saisie = SaisieReglement(
+            date_reglement=date_reglement,
+            type_reglement=type_reglement,
+            montant=montant,
+        )
+        resultat = lire_reglement(saisie)
+        if isinstance(resultat, EchecReglement):
             if est_htmx(request):
-                return _panneau_reglements(request, session, sejour, erreur)
-            flash(request, erreur)
-            return _rediriger(f"/sejours/{sejour.id}?onglet=reglements")
+                return _panneau_reglements(request, session, sejour, resultat)
+            return _fiche(request, session, sejour, "reglements", "notes", echec_reglement=resultat)
         session.add(
             Reglement(
                 sejour_id=sejour.id,
-                date_reglement=date.today(),
-                type_reglement=type_reglement,
-                montant=valeur,
+                date_reglement=resultat.date_reglement,
+                type_reglement=resultat.type_reglement,
+                montant=resultat.montant,
             )
         )
-        _journal(session, sejour.id, f"Règlement {type_reglement} : {euro(valeur)}")
+        _journal(
+            session,
+            sejour.id,
+            f"Règlement {resultat.type_reglement} : {euro(resultat.montant)}",
+        )
         session.commit()
         session.refresh(sejour)
         if est_htmx(request):
@@ -367,11 +413,16 @@ def _panneau_reservations(
     )
 
 
-def _panneau_reglements(request: Request, session: Session, sejour: Sejour, erreur: str | None):
+def _panneau_reglements(
+    request: Request,
+    session: Session,
+    sejour: Sejour,
+    echec: EchecReglement | None,
+):
     return fragment(
         request,
         "partials/panneau_reglements.html",
-        erreur_reglement=erreur,
+        echec_reglement=echec,
         **_contexte_fiche(session, sejour, oob=True, onglet="reglements"),
     )
 

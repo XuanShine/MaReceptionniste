@@ -1,0 +1,79 @@
+<div id="panneau-reglements" data-groupe="onglet" data-role="panneau" data-cle="reglements" {% if onglet != 'reglements' %}hidden{% endif %}>
+  {% if oob %}
+  <span id="compte-reglements" hx-swap-oob="true">({{ sejour.reglements|length }})</span>
+  <span id="compte-modifications" hx-swap-oob="true">({{ sejour.modifications|length }})</span>
+  {% endif %}
+  <div class="grid grid-cols-2 gap-2 border-b border-slate-200 bg-slate-50 p-3 md:grid-cols-3 xl:grid-cols-6">
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">Total TTC</div>
+      <div class="text-sm font-semibold tabular-nums">{{ totaux.total_ttc|euro }}</div>
+    </div>
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">Total HT</div>
+      <div class="text-sm font-semibold tabular-nums">{{ totaux.total_ht|euro }}</div>
+    </div>
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">Total TVA</div>
+      <div class="text-sm font-semibold tabular-nums">{{ totaux.total_tva|euro }}</div>
+    </div>
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">Total taxe de séjour</div>
+      <div class="text-sm font-semibold tabular-nums">{{ totaux.total_taxe|euro }}</div>
+    </div>
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">Total général TTC</div>
+      <div class="text-sm font-semibold tabular-nums">{{ totaux.total_general|euro }}</div>
+    </div>
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">Total restant à payer</div>
+      <div class="text-sm font-semibold tabular-nums {% if totaux.reste > 0 %}text-red-700{% elif totaux.reste < 0 %}text-amber-700{% else %}text-emerald-700{% endif %}">{{ totaux.reste|euro }}</div>
+    </div>
+  </div>
+  <div class="flex flex-col lg:flex-row">
+    <div class="min-w-0 flex-1 overflow-x-auto">
+      {% if erreur_reglement %}
+      <p class="px-3 py-2 text-sm text-red-700" role="alert">{{ erreur_reglement }}</p>
+      {% endif %}
+      <table class="sheet-table">
+        <thead>
+          <tr>
+            <th>Note</th>
+            <th>Date</th>
+            <th>Type</th>
+            <th class="num">Montant</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for reglement in sejour.reglements|sort(attribute='id') %}
+          <tr>
+            <td><button type="button" class="expander" tabindex="-1" aria-hidden="true">+</button></td>
+            <td>{{ reglement.date_reglement|date_fr }}</td>
+            <td>{{ reglement.type_reglement }}</td>
+            <td class="num">{{ reglement.montant|euro }}</td>
+          </tr>
+          {% endfor %}
+          <tr>
+            <td colspan="4" class="text-center text-sm text-slate-400">
+              <a href="#montant-reglement">Cliquez ici pour ajouter une nouvelle ligne</a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" action="/sejours/{{ sejour.id }}/reglements" hx-post="/sejours/{{ sejour.id }}/reglements" hx-target="#panneau-reglements" hx-swap="outerHTML" class="w-full border-t border-slate-200 bg-slate-50 p-2 lg:w-60 lg:border-l lg:border-t-0">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="mb-2 flex gap-1">
+        <input class="w-full rounded border border-slate-300 px-2 py-1 text-xs" placeholder="Entrer le texte à filtrer" oninput="filtrerMoyens(this.value)" aria-label="Filtrer les moyens de paiement">
+        <button type="button" class="shrink-0 rounded border border-slate-300 bg-white px-2 text-xs" onclick="this.previousElementSibling.value=''; filtrerMoyens('');">Effacer</button>
+      </div>
+      <label class="mb-2 block text-xs text-slate-500">Montant
+        <input id="montant-reglement" name="montant" required inputmode="decimal" placeholder="0,00" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+      </label>
+      <div class="flex flex-col gap-1">
+        {% for moyen in MOYENS_PAIEMENT %}
+        <button type="submit" name="type_reglement" value="{{ moyen }}" data-moyen="{{ moyen }}" class="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-left text-sm text-slate-800 hover:border-amber-400 hover:bg-amber-50">{{ moyen }}</button>
+        {% endfor %}
+      </div>
+    </form>
+  </div>
+</div>

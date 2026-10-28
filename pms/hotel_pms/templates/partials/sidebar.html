@@ -1,0 +1,28 @@
+<aside class="sticky top-0 flex h-screen w-48 shrink-0 flex-col bg-slate-900">
+  <div class="border-b border-white/10 px-3 py-4">
+    <div class="text-xs uppercase tracking-widest text-amber-400">Hôtel</div>
+    <div class="text-lg font-semibold leading-tight text-white">Panorama</div>
+    <div class="text-xs text-slate-400">Réception</div>
+  </div>
+  <nav class="flex-1 py-2" aria-label="Menu principal">
+    <a class="menu-link{% if actif == 'dashboard' %} is-active{% endif %}" href="/dashboard"{% if actif == 'dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
+    <a class="menu-link{% if actif == 'planning' %} is-active{% endif %}" href="/planning"{% if actif == 'planning' %} aria-current="page"{% endif %}>Planning</a>
+    <a class="menu-link{% if actif == 'sejours' %} is-active{% endif %}" href="/sejours"{% if actif == 'sejours' %} aria-current="page"{% endif %}>Séjours</a>
+    {% if sejour_actif_id %}
+    <a id="menu-detail" href="/sejours/{{ sejour_actif_id }}" class="menu-link{% if actif == 'detail' %} is-active{% endif %}"{% if actif == 'detail' %} aria-current="page"{% endif %}>Détails Séjour</a>
+    {% else %}
+    <span id="menu-detail" class="menu-link is-disabled" aria-disabled="true" title="Ouvrez un séjour depuis la liste Séjours">Détails Séjour</span>
+    {% endif %}
+    <a class="menu-link{% if actif == 'produits' %} is-active{% endif %}" href="/produits"{% if actif == 'produits' %} aria-current="page"{% endif %}>Produits</a>
+    <a class="menu-link{% if actif == 'chambres' %} is-active{% endif %}" href="/chambres"{% if actif == 'chambres' %} aria-current="page"{% endif %}>Chambres</a>
+    <a class="menu-link{% if actif == 'clients' %} is-active{% endif %}" href="/clients"{% if actif == 'clients' %} aria-current="page"{% endif %}>Clients</a>
+    <a class="menu-link{% if actif == 'parametres' %} is-active{% endif %}" href="/parametres"{% if actif == 'parametres' %} aria-current="page"{% endif %}>Paramètres</a>
+  </nav>
+  <div class="border-t border-white/10 p-3">
+    <div class="truncate text-xs text-slate-400">{{ user.nom }}</div>
+    <form method="post" action="/logout" class="mt-2">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit" class="text-xs text-slate-300 hover:text-white">Déconnexion</button>
+    </form>
+  </div>
+</aside>

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titre %}Planning{% endblock %}
+{% block contenu %}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+  <h1 class="text-xl font-semibold">Planning</h1>
+  <div class="flex gap-2 text-sm">
+    <a class="rounded-md border border-slate-300 bg-white px-3 py-1.5 hover:bg-slate-50" href="/planning?debut={{ precedent.isoformat() }}">Semaine précédente</a>
+    <a class="rounded-md border border-slate-300 bg-white px-3 py-1.5 hover:bg-slate-50" href="/planning?debut={{ suivant.isoformat() }}">Semaine suivante</a>
+  </div>
+</div>
+<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+  <table class="sheet-table">
+    <thead>
+      <tr>
+        <th>Chambre</th>
+        {% for jour in jours %}
+        <th class="{% if jour == aujourdhui %}bg-amber-100{% endif %}">{{ jour|date_courte }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for chambre in chambres %}
+      <tr>
+        <td>
+          <div class="font-medium">{{ chambre.numero }}</div>
+          <div class="text-xs text-slate-500">{{ chambre.type_chambre }}</div>
+        </td>
+        {% for jour in jours %}
+        {% set info = (grille.get(chambre.id) or {}).get(jour) %}
+        <td class="h-12 align-top {% if jour == aujourdhui %}bg-amber-50{% elif jour.weekday() >= 5 %}bg-stone-50{% endif %}">
+          {% if info %}
+          <a class="block rounded bg-sky-100 px-1 py-1 text-xs font-medium text-sky-950 hover:bg-sky-200" href="/sejours/{{ info[0] }}">{{ info[1] }}</a>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

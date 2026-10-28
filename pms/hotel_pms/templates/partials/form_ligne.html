@@ -1,0 +1,37 @@
+<form method="post" action="/sejours/{{ sejour.id }}/lignes" hx-post="/sejours/{{ sejour.id }}/lignes" hx-target="#panneau-reservations" hx-swap="outerHTML" class="grid grid-cols-2 gap-2 p-3 md:grid-cols-4">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="text-xs text-slate-500">Type
+    <input name="type_chambre" value="Double" maxlength="40" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+  </label>
+  <label class="text-xs text-slate-500">Chambre
+    <select name="chambre_id" required class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+      {% for chambre in chambres %}
+      <option value="{{ chambre.id }}">{{ chambre.numero }} — {{ chambre.type_chambre }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="text-xs text-slate-500">Début
+    <input type="date" name="date_debut" required value="{{ aujourdhui.isoformat() }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+  </label>
+  <label class="text-xs text-slate-500">Fin
+    <input type="date" name="date_fin" required value="{{ demain.isoformat() }}" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+  </label>
+  <label class="text-xs text-slate-500">Prix TTC
+    <input name="prix_ttc" required inputmode="decimal" placeholder="0,00" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+  </label>
+  <label class="text-xs text-slate-500">Remise %
+    <input name="remise_pct" value="0" inputmode="decimal" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+  </label>
+  <label class="text-xs text-slate-500">Adulte
+    <input name="adultes" value="2" inputmode="numeric" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+  </label>
+  <label class="text-xs text-slate-500">Enfant
+    <input name="enfants" value="0" inputmode="numeric" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+  </label>
+  <label class="text-xs text-slate-500">Taxe de séjour
+    <input name="taxe_sejour" value="0" inputmode="decimal" class="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm">
+  </label>
+  <div class="flex items-end">
+    <button class="btn btn-primary" type="submit">Ajouter la ligne</button>
+  </div>
+</form>

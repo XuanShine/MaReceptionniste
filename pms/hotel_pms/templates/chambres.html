@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block titre %}Chambres{% endblock %}
+{% block contenu %}
+<h1 class="mb-4 text-xl font-semibold">Chambres</h1>
+<form method="post" action="/chambres" class="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="text-sm">Numéro
+    <input name="numero" required maxlength="20" class="mt-1 block w-24 rounded-md border border-slate-300 px-2 py-1.5">
+  </label>
+  <label class="text-sm">Type
+    <input name="type_chambre" required maxlength="40" placeholder="Double" class="mt-1 block rounded-md border border-slate-300 px-2 py-1.5">
+  </label>
+  <label class="text-sm">État
+    <select name="etat" class="mt-1 block rounded-md border border-slate-300 px-2 py-1.5">
+      <option value="pret">Prêt</option>
+      <option value="non_pret" selected>Non prêt</option>
+    </select>
+  </label>
+  <button class="btn btn-primary" type="submit">Ajouter</button>
+</form>
+<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+  <table class="sheet-table">
+    <thead>
+      <tr><th>Numéro</th><th>Type</th><th>État</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for chambre in chambres %}
+      <tr>
+        <td class="font-medium">{{ chambre.numero }}</td>
+        <td>{{ chambre.type_chambre }}</td>
+        <td>{{ chambre.etat_libelle }}</td>
+        <td class="text-right">
+          <form method="post" action="/chambres/{{ chambre.id }}/supprimer" onsubmit="return confirm('Supprimer cette chambre ?');">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="text-sm text-red-700 hover:underline" type="submit">Supprimer</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-sm text-slate-500">Aucune chambre.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

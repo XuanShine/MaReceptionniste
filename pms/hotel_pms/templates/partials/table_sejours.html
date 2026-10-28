@@ -1,0 +1,40 @@
+<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+  <table class="sheet-table">
+    <thead>
+      <tr>
+        <th>Nom</th>
+        <th>Client</th>
+        <th>Partenaire</th>
+        <th>Chambre</th>
+        <th>Arrivée</th>
+        <th>Départ</th>
+        <th>Statut</th>
+        <th class="num">Reste</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for resume in resumes %}
+      <tr>
+        <td><a class="font-medium text-slate-900 hover:underline" data-guest="{{ resume.nom }}" href="/sejours/{{ resume.id }}">{{ resume.nom }}</a></td>
+        <td>{{ resume.client }}</td>
+        <td>{{ resume.partenaire }}</td>
+        <td>{{ resume.chambres }}</td>
+        <td>{{ resume.debut|date_fr }}</td>
+        <td>{{ resume.fin|date_fr }}</td>
+        <td>
+          {% if resume.est_en_cours %}
+          <span class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">En cours</span>
+          {% else %}
+          <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Traité</span>
+          {% endif %}
+        </td>
+        <td class="num {% if resume.reste > 0 %}text-red-700{% else %}text-emerald-700{% endif %}">{{ resume.reste|euro }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="8" class="text-sm text-slate-500">Aucun séjour.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

@@ -3,9 +3,6 @@
   <p class="px-3 py-2 text-sm text-red-700" role="alert">{{ erreur_conso }}</p>
   {% endif %}
   {% set vide = {'produit_id': '', 'prix_unitaire': '', 'quantite': '1'} %}
-  <template id="modele-conso">
-    {% with brouillon=vide %}{% include "partials/ligne_conso.html" %}{% endwith %}
-  </template>
   <div class="overflow-x-auto">
     <table class="sheet-table">
       <thead>
@@ -17,6 +14,9 @@
         </tr>
       </thead>
       <tbody>
+        <template id="modele-conso">
+          {% with brouillon=vide %}{% include "partials/ligne_conso.html" %}{% endwith %}
+        </template>
         {% for ligne in sejour.consommations %}
         <tr>
           <td>{{ ligne.nom }}</td>

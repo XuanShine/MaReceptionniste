@@ -63,6 +63,8 @@ document.addEventListener("click", (event) => {
     const ancre = ajout.closest("tr");
     if (!modele || !ancre) return;
     const fragment = modele.content.cloneNode(true);
+    const ligneModele = fragment.querySelector("tr");
+    if (!ligneModele) return;
     const identifiant = `ligne-nouvelle-${++ligneSeq}`;
     fragment.querySelectorAll("[data-form]").forEach((el) => {
       if (el.tagName === "FORM") el.id = identifiant;

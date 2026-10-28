@@ -18,9 +18,6 @@
     'taxe_sejour': '0',
     'nuits': ''
   } %}
-  <template id="modele-ligne">
-    {% with brouillon=vide %}{% include "partials/ligne_saisie.html" %}{% endwith %}
-  </template>
   <div class="overflow-x-auto">
     <table class="sheet-table">
       <thead>
@@ -43,6 +40,9 @@
         </tr>
       </thead>
       <tbody>
+        <template id="modele-ligne">
+          {% with brouillon=vide %}{% include "partials/ligne_saisie.html" %}{% endwith %}
+        </template>
         {% for ligne in sejour.lignes|sort(attribute='date_debut') %}
         <tr>
           <td><button type="button" class="expander" tabindex="-1" aria-hidden="true">+</button></td>

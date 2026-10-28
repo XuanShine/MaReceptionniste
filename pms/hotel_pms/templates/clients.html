@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block titre %}Clients{% endblock %}
+{% block contenu %}
+<h1 class="mb-4 text-xl font-semibold">Clients</h1>
+<form method="post" action="/clients" class="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="text-sm">Nom
+    <input name="nom" required maxlength="160" class="mt-1 block rounded-md border border-slate-300 px-2 py-1.5">
+  </label>
+  <label class="text-sm">Téléphone
+    <input name="telephone" maxlength="40" class="mt-1 block rounded-md border border-slate-300 px-2 py-1.5">
+  </label>
+  <label class="text-sm">E-mail
+    <input name="email" type="email" maxlength="160" class="mt-1 block rounded-md border border-slate-300 px-2 py-1.5">
+  </label>
+  <button class="btn btn-primary" type="submit">Ajouter</button>
+</form>
+<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+  <table class="sheet-table">
+    <thead>
+      <tr><th>Nom</th><th>Téléphone</th><th>E-mail</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for client in clients %}
+      <tr>
+        <td class="font-medium">{{ client.nom }}</td>
+        <td>{{ client.telephone }}</td>
+        <td>{{ client.email }}</td>
+        <td class="text-right">
+          <form method="post" action="/clients/{{ client.id }}/supprimer" onsubmit="return confirm('Supprimer ce client ?');">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="text-sm text-red-700 hover:underline" type="submit">Supprimer</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-sm text-slate-500">Aucun client.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

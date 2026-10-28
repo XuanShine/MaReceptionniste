@@ -1,0 +1,43 @@
+[project]
+name = "hotel-pms"
+version = "0.1.0"
+description = "PMS réception — FastAPI, HTMX, Tailwind, SQLModel"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "itsdangerous>=2.2",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.12",
+    "sqlmodel>=0.0.22",
+    "uvicorn>=0.32",
+]
+
+[project.scripts]
+reception = "hotel_pms.main:main"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.27",
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hotel_pms"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["hotel_pms", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]

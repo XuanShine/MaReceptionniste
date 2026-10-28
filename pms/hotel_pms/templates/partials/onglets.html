@@ -1,0 +1,5 @@
+<div class="tabstrip" role="tablist" aria-label="Détail du séjour">
+  {% for cle in ONGLETS %}
+  <a data-groupe="onglet" data-role="onglet" data-cle="{{ cle }}" role="tab" aria-selected="{{ 'true' if onglet == cle else 'false' }}" href="/sejours/{{ sejour.id }}?onglet={{ cle }}&bloc={{ bloc }}">{{ ONGLET_LIBELLES[cle] }}{% if cle == 'reservations' %} <span id="compte-reservations">({{ sejour.lignes|length }})</span>{% elif cle == 'reglements' %} <span id="compte-reglements">({{ sejour.reglements|length }})</span>{% elif cle == 'modifications' %} <span id="compte-modifications">({{ sejour.modifications|length }})</span>{% endif %}</a>
+  {% endfor %}
+</div>

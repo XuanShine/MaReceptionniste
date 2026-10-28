@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titre %}Réception{% endblock %} — Panorama</title>
+  <link rel="stylesheet" href="/static/tailwind.css">
+</head>
+<body class="bg-stone-100 text-slate-900 antialiased">
+  <div class="flex min-h-screen">
+    {% include "partials/sidebar.html" %}
+    <main class="min-w-0 flex-1 p-4">
+      {% if flash %}
+      <div class="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="status">{{ flash }}</div>
+      {% endif %}
+      {% block contenu %}{% endblock %}
+    </main>
+  </div>
+  <script src="/static/htmx.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

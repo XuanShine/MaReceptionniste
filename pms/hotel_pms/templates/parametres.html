@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titre %}Paramètres{% endblock %}
+{% block contenu %}
+<h1 class="mb-4 text-xl font-semibold">Paramètres</h1>
+<div class="max-w-xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+  <div class="prop">
+    <div class="prop-label">Établissement</div>
+    <div class="prop-value px-3 text-sm">Hôtel Panorama</div>
+  </div>
+  <div class="prop">
+    <div class="prop-label">TVA hébergement</div>
+    <div class="prop-value px-3 text-sm">10 %</div>
+  </div>
+  <div class="prop">
+    <div class="prop-label">Devise</div>
+    <div class="prop-value px-3 text-sm">EUR</div>
+  </div>
+  <div class="prop">
+    <div class="prop-label">Session</div>
+    <div class="prop-value px-3 text-sm">Cookie signé (12 h)</div>
+  </div>
+  <div class="prop">
+    <div class="prop-label">Base SQLite</div>
+    <div class="prop-value px-3 text-sm break-all">{{ db_path }}</div>
+  </div>
+</div>
+<p class="mt-3 max-w-xl text-sm text-slate-500">Les paramètres d'exploitation (saison, taxe par défaut, moyens de paiement) seront branchés ici.</p>
+{% endblock %}

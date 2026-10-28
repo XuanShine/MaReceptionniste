@@ -8,7 +8,14 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from hotel_pms.lecture import lister_chambres, lister_clients, lister_produits, resumer_sejours
+from hotel_pms.lecture import (
+    SegmentPlanning,
+    grille_planning,
+    lister_chambres,
+    lister_clients,
+    lister_produits,
+    resumer_sejours,
+)
 from hotel_pms.models import Chambre, Client, EtatChambre, Produit, Sejour
 from hotel_pms.saisie import couper, parser_decimal
 from hotel_pms.web import flash, ouvrir, rendre, verifier_csrf
@@ -57,16 +64,22 @@ def planning(request: Request, debut: str | None = None):
     jours = [origine + timedelta(days=i) for i in range(14)]
     with ouvrir(request) as session:
         chambres = lister_chambres(session)
-        sejours = list(session.exec(select(Sejour)).all())
-        grille: dict[int, dict[date, tuple[int, str]]] = {}
-        for sejour in sejours:
+        segments: list[SegmentPlanning] = []
+        for sejour in session.exec(select(Sejour)).all():
             for ligne in sejour.lignes:
                 if ligne.chambre_id is None:
                     continue
-                jour = ligne.date_debut
-                while jour < ligne.date_fin:
-                    grille.setdefault(ligne.chambre_id, {})[jour] = (sejour.id or 0, sejour.nom)
-                    jour += timedelta(days=1)
+                segments.append(
+                    SegmentPlanning(
+                        sejour_id=sejour.id or 0,
+                        nom=sejour.nom,
+                        chambre_id=ligne.chambre_id,
+                        debut=ligne.date_debut,
+                        fin=ligne.date_fin,
+                        en_cours=sejour.est_en_cours,
+                    )
+                )
+        grille = grille_planning(segments, [chambre.id or 0 for chambre in chambres], jours)
         return rendre(
             request,
             "planning.html",

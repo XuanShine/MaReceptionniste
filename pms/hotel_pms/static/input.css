@@ -149,6 +149,79 @@
   background: #fffbeb;
 }
 
+.planning-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.75rem;
+}
+.planning-table th,
+.planning-table td {
+  border-bottom: 1px solid #e2e8f0;
+  border-right: 1px solid #f1f5f9;
+  padding: 0;
+  height: 2.85rem;
+  vertical-align: middle;
+  text-align: left;
+}
+.planning-table thead th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 600;
+  padding: 0.45rem 0.35rem;
+  white-space: nowrap;
+}
+.planning-table thead th.is-today,
+.planning-table td.is-today {
+  background: #fffbeb;
+}
+.planning-table td.is-weekend {
+  background: #fafaf9;
+}
+.planning-table th.chambre {
+  width: 6.5rem;
+  background: #fff;
+  padding: 0.35rem 0.65rem;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+.planning-bloc {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: calc(100% - 8px);
+  min-height: 2.15rem;
+  margin: 4px;
+  padding: 0 0.45rem;
+  border-radius: 0.375rem;
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  overflow: hidden;
+}
+.planning-bloc.is-en-cours {
+  background: #0369a1;
+}
+.planning-bloc.is-traite {
+  background: #64748b;
+}
+.planning-bloc:hover {
+  filter: brightness(1.08);
+}
+.planning-nom {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.planning-nuits {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-weight: 500;
+  opacity: 0.9;
+  white-space: nowrap;
+}
+
 .expander {
   width: 1rem;
   height: 1rem;
@@ -158,4 +231,63 @@
   color: #475569;
   font-size: 0.75rem;
   padding: 0;
+}
+
+.ajout-ligne {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.875rem;
+  padding: 0.45rem;
+  cursor: pointer;
+}
+.ajout-ligne:hover {
+  color: #334155;
+  background: #f8fafc;
+}
+.ligne-saisie td {
+  background: #fffbeb;
+  padding: 0.2rem;
+}
+.ligne-actions {
+  white-space: nowrap;
+}
+.ligne-saisie input,
+.ligne-saisie select {
+  width: 100%;
+  min-width: 4.5rem;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.25rem;
+  background: #fff;
+  padding: 0.2rem 0.3rem;
+  font: inherit;
+  color: #0f172a;
+}
+.ligne-saisie input:focus,
+.ligne-saisie select:focus {
+  outline: 2px solid #f59e0b;
+  border-color: #f59e0b;
+}
+.cell-ok,
+.cell-x {
+  border: 0;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+.cell-ok {
+  background: #0f172a;
+  color: #fff;
+  font-weight: 600;
+  padding: 0.25rem 0.4rem;
+}
+.cell-x {
+  background: transparent;
+  color: #64748b;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.2rem;
 }

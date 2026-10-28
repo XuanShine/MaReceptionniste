@@ -9,31 +9,38 @@
   </div>
 </div>
 <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-  <table class="sheet-table">
+  <table class="planning-table">
     <thead>
       <tr>
         <th>Chambre</th>
         {% for jour in jours %}
-        <th class="{% if jour == aujourdhui %}bg-amber-100{% endif %}">{{ jour|date_courte }}</th>
+        <th class="{% if jour == aujourdhui %}is-today{% endif %}">{{ jour|date_courte }}</th>
         {% endfor %}
       </tr>
     </thead>
     <tbody>
       {% for chambre in chambres %}
+      {% set voies = grille[chambre.id] %}
+      {% for voie in voies %}
       <tr>
-        <td>
+        {% if loop.first %}
+        <th scope="row" class="chambre" rowspan="{{ voies|length }}">
           <div class="font-medium">{{ chambre.numero }}</div>
           <div class="text-xs text-slate-500">{{ chambre.type_chambre }}</div>
-        </td>
-        {% for jour in jours %}
-        {% set info = (grille.get(chambre.id) or {}).get(jour) %}
-        <td class="h-12 align-top {% if jour == aujourdhui %}bg-amber-50{% elif jour.weekday() >= 5 %}bg-stone-50{% endif %}">
-          {% if info %}
-          <a class="block rounded bg-sky-100 px-1 py-1 text-xs font-medium text-sky-950 hover:bg-sky-200" href="/sejours/{{ info[0] }}">{{ info[1] }}</a>
+        </th>
+        {% endif %}
+        {% for cell in voie %}
+        <td colspan="{{ cell.span }}" class="{% if cell.sejour_id %}is-stay{% elif cell.jour == aujourdhui %}is-today{% elif cell.jour.weekday() >= 5 %}is-weekend{% endif %}">
+          {% if cell.sejour_id %}
+          <a class="planning-bloc{% if cell.en_cours %} is-en-cours{% else %} is-traite{% endif %}" data-span="{{ cell.span }}" data-nuits="{{ cell.nuits }}" href="/sejours/{{ cell.sejour_id }}">
+            <span class="planning-nom">{{ cell.nom }}</span>
+            {% if cell.nuits > 1 %}<span class="planning-nuits">{{ cell.nuits }} nuits</span>{% endif %}
+          </a>
           {% endif %}
         </td>
         {% endfor %}
       </tr>
+      {% endfor %}
       {% endfor %}
     </tbody>
   </table>

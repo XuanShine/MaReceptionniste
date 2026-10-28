@@ -134,13 +134,20 @@ def test_reglement_statut_et_facture(client):
     token = jeton(page)
     partiel = client.post(
         f"/sejours/{sid}/reglements",
-        data={"csrf": token, "montant": "10,50", "type_reglement": "Espèces"},
+        data={
+            "csrf": token,
+            "date_reglement": "2026-10-28",
+            "montant": "10,50",
+            "type_reglement": "Espèces",
+        },
         headers={"HX-Request": "true"},
     )
     assert partiel.status_code == 200
     assert "<html" not in partiel.text.lower()
+    assert "28/10/2026" in partiel.text
     assert "Espèces" in partiel.text
     assert "10,50" in partiel.text
+    assert 'id="compte-reglements" hx-swap-oob="true">(3)</span>' in partiel.text
 
     statut = client.post(
         f"/sejours/{sid}/statut",
@@ -179,6 +186,108 @@ def test_reglement_statut_et_facture(client):
     assert "F-2026-" in facture.text
     assert "France" in facture.text
     assert "+33 0678157017" in facture.text
+
+
+def test_ligne_reglement(client):
+    login(client)
+    sid = id_monnier(client.app)
+    page = client.get(f"/sejours/{sid}?onglet=reglements").text
+    debut = page.index('id="panneau-reglements"')
+    fin = page.index('id="panneau-modifications"')
+    panneau = page[debut:fin]
+    assert "data-ajout-ligne" in panneau
+    assert 'id="modele-reglement"' in panneau
+    assert "filtrerMoyens" not in page
+    assert 'id="montant-reglement"' not in page
+    token = jeton(page)
+
+    invalide = client.post(
+        f"/sejours/{sid}/reglements",
+        data={
+            "csrf": token,
+            "date_reglement": "2026-11-04",
+            "type_reglement": "Espèces",
+            "montant": "0",
+        },
+        headers={"HX-Request": "true"},
+    )
+    assert invalide.status_code == 200
+    assert "<html" not in invalide.text.lower()
+    assert "Montant invalide." in invalide.text
+    assert 'name="date_reglement" required value="2026-11-04"' in invalide.text
+    assert 'name="montant" required inputmode="decimal" value="0"' in invalide.text
+    assert 'value="Espèces" selected' in invalide.text
+    assert 'class="ligne-saisie"' in invalide.text
+    assert 'id="compte-reglements" hx-swap-oob="true">(2)</span>' in invalide.text
+
+    date_invalide = client.post(
+        f"/sejours/{sid}/reglements",
+        data={
+            "csrf": token,
+            "date_reglement": "pas-une-date",
+            "type_reglement": "Espèces",
+            "montant": "0",
+        },
+        headers={"HX-Request": "true"},
+    )
+    assert "Date invalide." in date_invalide.text
+    assert "Montant invalide." not in date_invalide.text
+    assert 'value="pas-une-date"' in date_invalide.text
+    assert 'id="compte-reglements" hx-swap-oob="true">(2)</span>' in date_invalide.text
+
+    inconnu = client.post(
+        f"/sejours/{sid}/reglements",
+        data={
+            "csrf": token,
+            "date_reglement": "2026-11-04",
+            "type_reglement": "Bitcoin",
+            "montant": "12,00",
+        },
+        headers={"HX-Request": "true"},
+    )
+    assert "Moyen de paiement inconnu." in inconnu.text
+    assert "Montant invalide." not in inconnu.text
+    assert 'value="Bitcoin" selected' in inconnu.text
+    assert 'value="12,00"' in inconnu.text
+    assert 'id="compte-reglements" hx-swap-oob="true">(2)</span>' in inconnu.text
+
+    document = client.post(
+        f"/sejours/{sid}/reglements",
+        data={
+            "csrf": token,
+            "date_reglement": "2026-11-04",
+            "type_reglement": "Espèces",
+            "montant": "0",
+        },
+        follow_redirects=False,
+    )
+    assert document.status_code == 200
+    assert "<html" in document.text.lower()
+    assert document.text.count("Montant invalide.") == 1
+    assert 'role="status"' not in document.text
+    assert 'name="date_reglement" required value="2026-11-04"' in document.text
+    assert 'name="montant" required inputmode="decimal" value="0"' in document.text
+    assert 'value="Espèces" selected' in document.text
+    assert 'id="compte-reglements">(2)</span>' in document.text
+    balise = re.search(r'<div id="panneau-reglements"([^>]*)>', document.text)
+    assert balise and "hidden" not in balise.group(1)
+    notes = re.search(r'<div id="bloc-notes"([^>]*)>', document.text)
+    assert notes and "hidden" not in notes.group(1)
+
+    donnees = {
+        "csrf": token,
+        "date_reglement": "2026-11-04",
+        "type_reglement": "Espèces",
+        "montant": "10,50",
+    }
+    premier = client.post(f"/sejours/{sid}/reglements", data=donnees, headers={"HX-Request": "true"})
+    assert 'id="compte-reglements" hx-swap-oob="true">(3)</span>' in premier.text
+    assert premier.text.count("04/11/2026") == 1
+    second = client.post(f"/sejours/{sid}/reglements", data=donnees, headers={"HX-Request": "true"})
+    assert second.status_code == 200
+    assert 'id="compte-reglements" hx-swap-oob="true">(4)</span>' in second.text
+    assert second.text.count("04/11/2026") == 2
+    assert second.text.count("10,50") == 2
 
 
 def test_abandon_desactive_le_menu(client):

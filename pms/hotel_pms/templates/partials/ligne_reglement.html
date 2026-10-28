@@ -1,0 +1,22 @@
+<tr class="ligne-saisie">
+  <td class="ligne-actions">
+    <form data-form id="reglement-brouillon" method="post" action="/sejours/{{ sejour.id }}/reglements" hx-post="/sejours/{{ sejour.id }}/reglements" hx-target="#panneau-reglements" hx-swap="outerHTML">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+    </form>
+    <button class="cell-ok" type="submit" data-form form="reglement-brouillon">Enregistrer</button>
+    <button class="cell-x" type="button" data-retirer-ligne aria-label="Retirer la ligne">×</button>
+  </td>
+  <td><input data-form form="reglement-brouillon" type="date" name="date_reglement" required value="{{ brouillon.date_reglement }}" aria-label="Date"></td>
+  <td>
+    <select data-form form="reglement-brouillon" name="type_reglement" aria-label="Type" required>
+      <option value="">—</option>
+      {% for moyen in MOYENS_PAIEMENT %}
+      <option value="{{ moyen }}" {% if brouillon.type_reglement == moyen %}selected{% endif %}>{{ moyen }}</option>
+      {% endfor %}
+      {% if brouillon.type_reglement and brouillon.type_reglement not in MOYENS_PAIEMENT %}
+      <option value="{{ brouillon.type_reglement }}" selected>{{ brouillon.type_reglement }}</option>
+      {% endif %}
+    </select>
+  </td>
+  <td><input data-form form="reglement-brouillon" name="montant" required inputmode="decimal" value="{{ brouillon.montant }}" placeholder="0,00" aria-label="Montant" autocomplete="off"></td>
+</tr>

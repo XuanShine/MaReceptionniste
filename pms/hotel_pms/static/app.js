@@ -114,10 +114,3 @@ document.addEventListener("input", (event) => {
   const nuits = Math.round((Date.parse(fin) - Date.parse(debut)) / 86400000);
   affichage.textContent = nuits > 0 ? String(nuits) : "—";
 });
-
-function filtrerMoyens(valeur) {
-  const q = valeur.trim().toLowerCase();
-  document.querySelectorAll("[data-moyen]").forEach((el) => {
-    el.hidden = q.length > 0 && !el.dataset.moyen.toLowerCase().includes(q);
-  });
-}

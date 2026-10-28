@@ -1,0 +1,20 @@
+<tr class="ligne-saisie">
+  <td>
+    <form data-form id="conso-brouillon" method="post" action="/sejours/{{ sejour.id }}/consommations" hx-post="/sejours/{{ sejour.id }}/consommations" hx-target="#panneau-consommations" hx-swap="outerHTML">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+    </form>
+    <div class="ligne-actions">
+      <button class="cell-ok" type="submit" data-form form="conso-brouillon">Enregistrer</button>
+      <button class="cell-x" type="button" data-retirer-ligne aria-label="Retirer la ligne">×</button>
+    </div>
+    <select data-form form="conso-brouillon" name="produit_id" aria-label="Produit" required>
+      <option value="">—</option>
+      {% for produit in produits %}
+      <option value="{{ produit.id }}" data-prix="{{ produit.prix_ttc }}" {% if brouillon.produit_id == (produit.id|string) %}selected{% endif %}>{{ produit.nom }}</option>
+      {% endfor %}
+    </select>
+  </td>
+  <td><input data-form form="conso-brouillon" name="prix_unitaire" inputmode="decimal" value="{{ brouillon.prix_unitaire }}" placeholder="0,00" aria-label="Prix unitaire" autocomplete="off"></td>
+  <td><input data-form form="conso-brouillon" name="quantite" inputmode="numeric" value="{{ brouillon.quantite }}" aria-label="Quantité" autocomplete="off"></td>
+  <td class="num"><span data-role="total">—</span></td>
+</tr>

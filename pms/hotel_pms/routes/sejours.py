@@ -10,12 +10,14 @@ from sqlmodel import Session, select
 from hotel_pms.compta import totaux_sejour
 from hotel_pms.constants import BLOCS, MOYENS_PAIEMENT, ONGLETS
 from hotel_pms.format import euro
-from hotel_pms.lecture import lister_chambres, lister_clients
+from hotel_pms.lecture import lister_chambres, lister_clients, lister_produits
 from hotel_pms.models import (
     Chambre,
     Client,
+    LigneConsommation,
     LigneReservation,
     ModificationSejour,
+    Produit,
     Reglement,
     Sejour,
     StatutSejour,
@@ -57,6 +59,7 @@ def _contexte_fiche(session: Session, sejour: Sejour, **extra):
         "sejour": sejour,
         "totaux": totaux_sejour(list(sejour.lignes), list(sejour.reglements)),
         "chambres": lister_chambres(session),
+        "produits": lister_produits(session),
         "clients": lister_clients(session),
         "aujourdhui": date.today(),
         "demain": date.today() + timedelta(days=1),
@@ -75,6 +78,7 @@ def _fiche(request: Request, session: Session, sejour: Sejour, onglet: str, bloc
         erreur_ligne=None,
         erreur_reglement=None,
         brouillon_ligne=None,
+        brouillon_conso=None,
         **_contexte_fiche(session, sejour),
     )
 
@@ -310,6 +314,43 @@ def ajouter_ligne(
         return _rediriger(f"/sejours/{sejour.id}?onglet=reservations")
 
 
+@router.post("/sejours/{sejour_id}/consommations")
+def ajouter_consommation(
+    request: Request,
+    sejour_id: int,
+    csrf: str = Form(""),
+    produit_id: str = Form(""),
+    prix_unitaire: str = Form(""),
+    quantite: str = Form("1"),
+):
+    verifier_csrf(request, csrf)
+    with ouvrir(request) as session:
+        sejour = session.get(Sejour, sejour_id)
+        if sejour is None:
+            return _rediriger("/sejours")
+        erreur, ligne = _lire_conso(
+            session,
+            produit_id=produit_id,
+            prix_unitaire=prix_unitaire,
+            quantite=quantite,
+        )
+        if erreur or ligne is None:
+            brouillon = _brouillon_conso(produit_id=produit_id, prix_unitaire=prix_unitaire, quantite=quantite)
+            if est_htmx(request):
+                return _panneau_consommations(request, session, sejour, erreur or "Ligne invalide.", brouillon)
+            flash(request, erreur or "Ligne invalide.")
+            return _rediriger(f"/sejours/{sejour.id}?onglet=consommations")
+        ligne.sejour_id = sejour.id
+        session.add(ligne)
+        _journal(session, sejour.id, f"Consommation {ligne.nom} × {ligne.quantite} : {euro(ligne.prix_total)}")
+        session.commit()
+        session.refresh(sejour)
+        if est_htmx(request):
+            return _panneau_consommations(request, session, sejour, None)
+        flash(request, "Consommation enregistrée.")
+        return _rediriger(f"/sejours/{sejour.id}?onglet=consommations")
+
+
 def _panneau_reservations(
     request: Request,
     session: Session,
@@ -384,6 +425,55 @@ def _prochain_numero(session: Session) -> str:
         except ValueError:
             continue
     return f"{prefixe}{suivant:04d}"
+
+
+def _panneau_consommations(
+    request: Request,
+    session: Session,
+    sejour: Sejour,
+    erreur: str | None,
+    brouillon: dict | None = None,
+):
+    return fragment(
+        request,
+        "partials/panneau_consommations.html",
+        erreur_conso=erreur,
+        brouillon_conso=brouillon,
+        **_contexte_fiche(session, sejour, oob=False, onglet="consommations"),
+    )
+
+
+def _brouillon_conso(**champs) -> dict[str, str]:
+    return {
+        "produit_id": champs["produit_id"],
+        "prix_unitaire": champs["prix_unitaire"],
+        "quantite": champs["quantite"] or "1",
+    }
+
+
+def _lire_conso(session: Session, **champs) -> tuple[str | None, LigneConsommation | None]:
+    try:
+        produit_pk = int(champs["produit_id"])
+    except ValueError:
+        return "Choisissez un produit.", None
+    produit = session.get(Produit, produit_pk)
+    if produit is None:
+        return "Produit introuvable.", None
+    try:
+        prix = parser_decimal(champs["prix_unitaire"] or str(produit.prix_ttc), Decimal("0"), Decimal("100000"))
+    except ValueError:
+        return "Prix unitaire invalide.", None
+    try:
+        quantite = parser_entier(champs["quantite"] or "1", 1, 999)
+    except ValueError:
+        return "Quantité invalide.", None
+    return None, LigneConsommation(
+        sejour_id=0,
+        produit_id=produit.id,
+        nom=produit.nom,
+        prix_unitaire=prix,
+        quantite=quantite,
+    )
 
 
 def _brouillon_ligne(**champs) -> dict[str, str]:

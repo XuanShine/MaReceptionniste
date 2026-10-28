@@ -6,12 +6,13 @@ Chambre
 Produit
 Sejour (statut en_cours | traite, partenaire, notes, contacts)
     ├── LigneReservation (type, chambre, nuits, dates, prix TTC, remise, adultes, enfants, taxe)
+    ├── LigneConsommation (produit, prix unitaire, quantité, total dérivé)
     ├── Reglement (date, type, montant)
     └── ModificationSejour
 """
 
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 
 from sqlalchemy import Column, ForeignKey, Integer, Numeric
@@ -89,6 +90,8 @@ class Produit(SQLModel, table=True):
     prix_ttc: Decimal = Field(default=Decimal("0.00"), sa_column=_montant())
     taux_tva: Decimal = Field(default=Decimal("10.00"), sa_column=_montant())
 
+    consommations: list["LigneConsommation"] = Relationship(back_populates="produit")
+
 
 class Sejour(SQLModel, table=True):
     __tablename__ = "sejour"
@@ -123,6 +126,10 @@ class Sejour(SQLModel, table=True):
         back_populates="sejour",
         sa_relationship_kwargs={"cascade": "all, delete-orphan", "passive_deletes": True},
     )
+    consommations: list["LigneConsommation"] = Relationship(
+        back_populates="sejour",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "passive_deletes": True},
+    )
     modifications: list["ModificationSejour"] = Relationship(
         back_populates="sejour",
         sa_relationship_kwargs={"cascade": "all, delete-orphan", "passive_deletes": True},
@@ -141,6 +148,10 @@ class Sejour(SQLModel, table=True):
     @property
     def statut_libelle(self) -> str:
         return "En cours" if self.est_en_cours else "Traité"
+
+    @property
+    def total_consommations(self) -> Decimal:
+        return sum((ligne.prix_total for ligne in self.consommations), Decimal("0.00"))
 
 
 class LigneReservation(SQLModel, table=True):
@@ -177,6 +188,32 @@ class Reglement(SQLModel, table=True):
     montant: Decimal = Field(default=Decimal("0.00"), sa_column=_montant())
 
     sejour: Sejour = Relationship(back_populates="reglements")
+
+
+class LigneConsommation(SQLModel, table=True):
+    """Extra du séjour (minibar, parking…). Le total est prix unitaire × quantité."""
+
+    __tablename__ = "ligne_consommation"
+
+    id: int | None = Field(default=None, primary_key=True)
+    sejour_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("sejour.id", ondelete="CASCADE"), nullable=False, index=True)
+    )
+    produit_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, ForeignKey("produit.id", ondelete="SET NULL"), nullable=True, index=True),
+    )
+    nom: str
+    prix_unitaire: Decimal = Field(default=Decimal("0.00"), sa_column=_montant())
+    quantite: int = 1
+
+    sejour: Sejour = Relationship(back_populates="consommations")
+    produit: Produit | None = Relationship(back_populates="consommations")
+
+    @property
+    def prix_total(self) -> Decimal:
+        total = Decimal(self.prix_unitaire) * Decimal(self.quantite)
+        return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 class ModificationSejour(SQLModel, table=True):

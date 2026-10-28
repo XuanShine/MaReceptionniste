@@ -3,7 +3,7 @@ from html import unescape
 from pathlib import Path
 
 from hotel_pms.auth import verifier_mot_de_passe
-from hotel_pms.models import Chambre, Sejour, User
+from hotel_pms.models import Chambre, Produit, Sejour, User
 from hotel_pms.seed import JOURNAL_MONNIER, NOTES_MONNIER
 from sqlalchemy import inspect
 from sqlmodel import Session, select
@@ -286,3 +286,39 @@ def test_ajout_ligne_dans_la_grille(client):
     assert 'class="ligne-saisie"' in invalide.text
     assert 'value="Suite"' in invalide.text
     assert 'value="2026-11-10"' in invalide.text
+
+
+def test_consommation_persiste_et_calcule_le_total(client):
+    login(client)
+    sid = id_monnier(client.app)
+    page = client.get(f"/sejours/{sid}?onglet=consommations").text
+    assert "Prix unitaire" in page
+    assert "Quantité" in page
+    assert "Prix total" in page
+    assert "Ajouter une ligne" in page
+    assert 'id="modele-conso"' in page
+    assert "Aucune consommation" not in page
+    token = jeton(page)
+    with Session(client.app.state.engine) as session:
+        produit = session.exec(select(Produit).where(Produit.nom == "Parking")).one()
+        produit_id = produit.id
+    reponse = client.post(
+        f"/sejours/{sid}/consommations",
+        data={"csrf": token, "produit_id": str(produit_id), "prix_unitaire": "8,00", "quantite": "2"},
+        headers={"HX-Request": "true"},
+    )
+    assert reponse.status_code == 200
+    assert "Parking" in reponse.text
+    assert "8,00" in reponse.text
+    assert ">2<" in reponse.text
+    assert "16,00" in reponse.text
+    fiche = client.get(f"/sejours/{sid}?onglet=consommations").text
+    assert "16,00" in fiche
+
+    invalide = client.post(
+        f"/sejours/{sid}/consommations",
+        data={"csrf": token, "produit_id": "", "prix_unitaire": "8,00", "quantite": "1"},
+        headers={"HX-Request": "true"},
+    )
+    assert "Choisissez un produit." in invalide.text
+    assert 'class="ligne-saisie"' in invalide.text

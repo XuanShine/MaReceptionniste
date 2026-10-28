@@ -254,6 +254,9 @@
 .ligne-actions {
   white-space: nowrap;
 }
+.ligne-saisie .ligne-actions {
+  margin-bottom: 0.25rem;
+}
 .ligne-saisie input,
 .ligne-saisie select {
   width: 100%;

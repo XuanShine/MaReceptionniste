@@ -146,6 +146,7 @@ def test_ajouter_un_client_et_une_chambre(client: TestClient) -> None:
     assert "Marquer prête" in chambres.text
     client.post("/chambres/1/etat", headers={"HX-Request": "true", "HX-Target": "liste-chambres"})
     liste = client.get("/chambres")
+    assert liste.url.path == "/parametres"
     assert "Marquer non prête" in liste.text
 
 
@@ -174,6 +175,21 @@ def test_confirmer_ecrit_le_journal_sans_quitter_la_fiche(client: TestClient) ->
     assert "Modifications (2)" in reponse.text
     assert "Type voiture" in reponse.text
     assert "LE CLOEREC" in reponse.text
+
+
+def test_le_menu_ouvre_les_parametres(client: TestClient) -> None:
+    _connecter(client)
+    accueil = client.get("/")
+    assert 'href="/parametres"' in accueil.text
+    assert "bg-primary-soft" not in accueil.text.split('href="/parametres"', 1)[1][:160]
+    page = client.get("/parametres")
+    assert page.status_code == 200
+    assert "<h1" in page.text and "Paramètres" in page.text
+    assert "Hôtel Panorama" in page.text
+    assert format_euros(200) in page.text
+    assert "Nouvelle chambre" in page.text
+    assert "bg-primary-soft" in page.text.split('href="/parametres"', 1)[1][:160]
+    assert 'href="/chambres"' not in accueil.text
 
 
 def test_la_deconnexion_referme_les_pages(client: TestClient) -> None:

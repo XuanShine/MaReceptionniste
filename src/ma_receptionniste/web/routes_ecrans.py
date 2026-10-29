@@ -12,6 +12,7 @@ from ma_receptionniste.consultations import (
     lister_reservations,
     options_clients,
 )
+from ma_receptionniste.facturation import TAXE_SEJOUR_CENTIMES
 from ma_receptionniste.saisie import (
     basculer_etat,
     creer_chambre,
@@ -153,6 +154,15 @@ async def etat_chambre(request: Request, chambre_id: int, lundi: date | None = N
         lignes = await run_in_threadpool(lister_chambres)
         return fragments([rendre("partials/liste_chambres.html", chambres=lignes, oob=True)])
     return rediriger(request, "/chambres")
+
+
+@router.get("/parametres")
+async def parametres(request: Request):
+    return page(
+        request,
+        "parametres.html",
+        {"titre": "Paramètres", "actif": "/parametres", "taxe_centimes": TAXE_SEJOUR_CENTIMES},
+    )
 
 
 @router.get("/reservations")

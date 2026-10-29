@@ -176,6 +176,19 @@ def test_confirmer_ecrit_le_journal_sans_quitter_la_fiche(client: TestClient) ->
     assert "LE CLOEREC" in reponse.text
 
 
+def test_le_menu_ouvre_les_parametres(client: TestClient) -> None:
+    _connecter(client)
+    accueil = client.get("/")
+    assert 'href="/parametres"' in accueil.text
+    assert "bg-primary-soft" not in accueil.text.split('href="/parametres"', 1)[1][:160]
+    page = client.get("/parametres")
+    assert page.status_code == 200
+    assert "<h1" in page.text and "Paramètres" in page.text
+    assert "Hôtel Panorama" in page.text
+    assert format_euros(200) in page.text
+    assert "bg-primary-soft" in page.text.split('href="/parametres"', 1)[1][:160]
+
+
 def test_la_deconnexion_referme_les_pages(client: TestClient) -> None:
     _connecter(client)
     client.post("/logout", follow_redirects=False)

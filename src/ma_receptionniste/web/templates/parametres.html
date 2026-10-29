@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block contenu %}
+<section class="carte px-4 py-3">
+  <div class="grid grid-cols-4 gap-3">
+    <div class="flex flex-col gap-1">
+      <span>Établissement</span>
+      <span class="lecture">Hôtel Panorama</span>
+    </div>
+    <div class="flex flex-col gap-1">
+      <span>Taxe de séjour</span>
+      <span class="lecture">{{ taxe_centimes|euros }}</span>
+      <span class="text-xs text-ardoise">par adulte et par nuit</span>
+    </div>
+    <div class="flex flex-col gap-1">
+      <span>Devise</span>
+      <span class="lecture">EUR</span>
+    </div>
+  </div>
+</section>
+{% endblock %}

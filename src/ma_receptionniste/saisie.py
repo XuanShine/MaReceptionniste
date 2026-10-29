@@ -22,7 +22,6 @@ from ma_receptionniste.sejours import enregistrer_sejour
 # Champs du haut de la fiche séjour, dans l'ordre d'affichage et du journal.
 CHAMPS_FICHE: dict[str, tuple[type[Client] | type[Reservation], str]] = {
     "nom": (Client, "Nom"),
-    "prenom": (Client, "Prénom"),
     "pays": (Client, "Pays de nat."),
     "partenaire": (Reservation, "Partenaire"),
     "traitee": (Reservation, "Traité"),
@@ -75,7 +74,6 @@ def basculer_etat(chambre_id: int) -> None:
 
 def creer_client(
     nom: str,
-    prenom: str | None = None,
     email: str | None = None,
     telephone: str | None = None,
     adresse: str | None = None,
@@ -85,7 +83,6 @@ def creer_client(
     with get_session() as session:
         client = Client(
             nom=nom.strip(),
-            prenom=_vide(prenom),
             pays=_vide(pays),
             email=_vide(email),
             telephone=_vide(telephone),

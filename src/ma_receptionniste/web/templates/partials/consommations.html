@@ -1,0 +1,18 @@
+<div id="table-consommations" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  <table class="w-full border-collapse text-sm">
+    <thead><tr>{% for titre in ("Date", "Libellé", "Qté", "PU TTC", "Montant") %}<th class="th {{ 'text-right' if titre in ('Qté', 'PU TTC', 'Montant') else 'text-left' }} {{ 'w-full' if titre == 'Libellé' else '' }}">{{ titre }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for consommation in fiche.consommations %}
+      <tr class="hover:bg-slate-50">
+        <td class="td">{{ consommation.date|date_courte }}</td>
+        <td class="td w-full">{{ consommation.libelle }}</td>
+        <td class="td text-right">{{ consommation.quantite }}</td>
+        <td class="td text-right">{{ consommation.prix_unitaire_centimes|euros }}</td>
+        <td class="td text-right font-semibold">{{ consommation.montant|euros }}</td>
+      </tr>
+      {% else %}
+      <tr><td class="td text-center text-ardoise" colspan="5">Aucune consommation.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

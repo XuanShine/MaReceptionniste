@@ -1,0 +1,55 @@
+<div id="planning" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %} class="flex flex-col gap-4">
+  <div class="flex items-center gap-2">
+    <a class="btn btn-outline px-2" title="Semaine précédente" href="/?lundi={{ planning.precedent.isoformat() }}" hx-get="/?lundi={{ planning.precedent.isoformat() }}" hx-target="#planning" hx-swap="none" hx-push-url="true"><span class="material-icons">chevron_left</span></a>
+    <a class="btn btn-outline" href="/?lundi={{ planning.aujourdhui.isoformat() }}" hx-get="/?lundi={{ planning.aujourdhui.isoformat() }}" hx-target="#planning" hx-swap="none" hx-push-url="true">Aujourd'hui</a>
+    <a class="btn btn-outline px-2" title="Semaine suivante" href="/?lundi={{ planning.suivant.isoformat() }}" hx-get="/?lundi={{ planning.suivant.isoformat() }}" hx-target="#planning" hx-swap="none" hx-push-url="true"><span class="material-icons">chevron_right</span></a>
+    <p class="ml-2 text-base font-medium">{{ planning.periode }}</p>
+    <span class="flex-1"></span>
+    {% for statut in planning.legende %}
+    <span class="flex items-center gap-1.5 text-xs text-ardoise"><span class="h-2.5 w-2.5 rounded-sm bg-{{ statut.couleur }}"></span>{{ statut.libelle }}</span>
+    {% endfor %}
+  </div>
+  <div class="carte overflow-hidden">
+    {% if planning.vide %}
+    <div class="flex flex-col items-center gap-2 py-10 text-ardoise">
+      <span class="material-icons text-4xl text-slate-300">bed</span>
+      <p class="text-sm">Aucune chambre n'est encore configurée.</p>
+      <a class="text-sm font-medium text-primary no-underline hover:underline" href="/chambres">Ajouter une chambre</a>
+    </div>
+    {% else %}
+    <div class="overflow-x-auto">
+      <div class="grid min-w-[62.5rem] text-sm" style="grid-template-columns: 10rem repeat(7, minmax(7.5rem, 1fr));">
+        <div class="sticky left-0 z-20 flex items-end border-b border-r border-slate-200 bg-white px-3 pb-1.5"><span class="text-xs font-semibold text-ardoise">Chambre</span></div>
+        {% for entete in planning.entetes %}
+        <div class="flex flex-col items-center border-b border-r border-slate-200 py-1.5 {{ entete.fond }}">
+          <span class="text-[11px] uppercase tracking-wide {{ entete.couleur }}">{{ entete.nom }}</span>
+          <span class="text-base font-semibold tabular-nums leading-tight {{ entete.couleur }}">{{ entete.numero }}</span>
+        </div>
+        {% endfor %}
+        {% for chambre in planning.lignes %}
+        <div class="sticky left-0 z-10 flex h-10 items-center gap-2 border-b border-r border-slate-200 bg-white px-3">
+          <button type="button" class="flex h-5 w-5 items-center justify-center rounded-full hover:bg-slate-100" title="{{ chambre.etat_label }} · cliquer pour basculer" hx-post="/chambres/{{ chambre.id }}/etat?lundi={{ planning.lundi.isoformat() }}" hx-target="#planning" hx-swap="none">
+            <span class="h-2.5 w-2.5 rounded-full {{ 'bg-positive' if chambre.prete else 'bg-warning' }}"></span>
+          </button>
+          <span class="font-semibold tabular-nums">{{ chambre.nom }}</span>
+          {% if chambre.type_chambre %}<span class="truncate text-xs text-ardoise">{{ chambre.type_chambre }}</span>{% endif %}
+        </div>
+        {% for case in chambre.cases %}
+        <div class="h-10 border-b border-r border-slate-200 {{ case.fond if not case.sejour else '' }} {{ 'p-1' if case.sejour else '' }}" style="grid-column: span {{ case.longueur }}">
+          {% if case.sejour %}
+          <a href="/reservations/{{ case.sejour.reservation_id }}" title="{{ case.sejour.titre }}" class="flex h-full overflow-hidden rounded-md bg-{{ case.sejour.couleur }}-soft text-{{ case.sejour.couleur }} {{ 'rounded-l-none' if case.sejour.coupe_gauche else '' }} {{ 'rounded-r-none' if case.sejour.coupe_droite else '' }}">
+            <span class="w-1 shrink-0 bg-{{ case.sejour.couleur }}"></span>
+            <span class="flex min-w-0 flex-col justify-center px-2">
+              <span class="truncate text-[13px] font-semibold leading-tight">{{ case.sejour.nom }}</span>
+              {% if case.sejour.partenaire %}<span class="truncate text-[11px] leading-tight opacity-75">{{ case.sejour.partenaire }}</span>{% endif %}
+            </span>
+          </a>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>

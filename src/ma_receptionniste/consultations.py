@@ -112,12 +112,6 @@ def segments(jours: list[date], sejours: list[dict]) -> list[dict]:
     return resultat
 
 
-def _nom_client(prenom: str | None, nom: str) -> str:
-    if prenom:
-        return f"{prenom} {nom}"
-    return nom
-
-
 def _etat(valeur: EtatChambre | str) -> str:
     return valeur.value if isinstance(valeur, EtatChambre) else str(valeur)
 
@@ -151,7 +145,7 @@ def _sejours_visibles(session: Session, debut: date, fin: date, aujourd_hui: dat
             "reservation_id": sejour.reservation_id,
             "date_debut": sejour.date_debut,
             "date_fin": sejour.date_fin,
-            "nom": sejour.nom_client or _nom_client(client.prenom, client.nom),
+            "nom": sejour.nom_client or client.nom,
             "partenaire": reservation.partenaire,
             "statut": statut_sejour(reservation.statut, sejour.date_debut, sejour.date_fin, aujourd_hui),
             "nuits": nuits_entre(sejour.date_debut, sejour.date_fin, debut, fin),
@@ -198,7 +192,6 @@ def lister_clients() -> list[dict]:
             {
                 "id": client.id,
                 "nom": client.nom,
-                "prenom": client.prenom,
                 "pays": client.pays,
                 "email": client.email,
                 "telephone": client.telephone,
@@ -210,10 +203,7 @@ def lister_clients() -> list[dict]:
 
 
 def options_clients() -> dict[int, str]:
-    # ui.select attend identifiant → libellé.
-    return {
-        client["id"]: f"{_nom_client(client['prenom'], client['nom'])} #{client['id']}" for client in lister_clients()
-    }
+    return {client["id"]: f"{client['nom']} #{client['id']}" for client in lister_clients()}
 
 
 def options_chambres() -> dict[int, str]:
@@ -250,7 +240,7 @@ def lister_reservations(aujourd_hui: date | None = None) -> list[dict]:
             resultat.append(
                 {
                     "id": reservation.id,
-                    "client": _nom_client(reservation.client.prenom, reservation.client.nom),
+                    "client": reservation.client.nom,
                     "partenaire": reservation.partenaire,
                     "chambres": ", ".join(sejour.chambre.nom for sejour in sejours),
                     "date_debut": debut,
@@ -284,8 +274,7 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
             "client": {
                 "id": client.id,
                 "nom": client.nom,
-                "prenom": client.prenom,
-                "nom_complet": _nom_client(client.prenom, client.nom),
+                "nom_complet": client.nom,
                 "pays": client.pays,
                 "telephone": client.telephone,
                 "email": client.email,

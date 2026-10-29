@@ -1,0 +1,4 @@
+{% from "macros.html" import badge, lecture_date, lecture_numero with context %}
+{{ lecture_date(true) }}
+{{ lecture_numero(true) }}
+{{ badge(statut.libelle, statut.couleur, "badge-infos", true) }}

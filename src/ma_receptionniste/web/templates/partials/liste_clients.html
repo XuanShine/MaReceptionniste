@@ -1,0 +1,31 @@
+<div id="liste-clients" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  {% if clients %}
+  <table id="table-clients" class="w-full text-sm">
+    <thead>
+      <tr>
+        {% for titre in ("Nom", "Pays", "Téléphone", "Email", "Adresse", "Notes") %}
+        <th class="th text-left">{{ titre }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for client in clients %}
+      <tr data-filtre-ligne class="hover:bg-slate-50">
+        <td class="td">{{ client.nom }}</td>
+        <td class="td">{{ client.pays or "" }}</td>
+        <td class="td">{{ client.telephone or "" }}</td>
+        <td class="td">{{ client.email or "" }}</td>
+        <td class="td">{{ client.adresse or "" }}</td>
+        <td class="td">{{ client.notes or "" }}</td>
+      </tr>
+      {% endfor %}
+      <tr id="table-clients-vide" hidden><td class="td text-center text-ardoise" colspan="6">Aucun client ne correspond</td></tr>
+    </tbody>
+  </table>
+  {% else %}
+  <div class="flex flex-col items-center gap-2 py-10 text-ardoise">
+    <span class="material-icons text-4xl text-slate-300">people</span>
+    <p class="text-sm">Aucun client pour l'instant. Commencez par le formulaire ci-dessus.</p>
+  </div>
+  {% endif %}
+</div>

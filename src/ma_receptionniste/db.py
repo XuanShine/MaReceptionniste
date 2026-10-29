@@ -63,6 +63,7 @@ def ajouter_colonnes_manquantes(engine: Engine) -> list[str]:
             connexion.exec_driver_sql(f"ALTER TABLE {nom_table} ADD COLUMN {definition}")
         _reprendre_valeurs_anciennes(connexion, set(ajoutees))
         _retirer_colonnes_remplacees(connexion)
+        _fusionner_le_nom_client(connexion)
     return ajoutees
 
 
@@ -106,6 +107,16 @@ def _retirer_colonnes_remplacees(connexion) -> None:
     for table, ancienne, nouvelle in remplacees:
         if _a_colonne(connexion, table, ancienne) and _a_colonne(connexion, table, nouvelle):
             connexion.exec_driver_sql(f"ALTER TABLE {table} DROP COLUMN {ancienne}")
+
+
+def _fusionner_le_nom_client(connexion) -> None:
+    """L'écran montrait le prénom puis le nom. On recolle cet ordre dans nom avant de retirer l'ancienne colonne."""
+    if not _a_colonne(connexion, "client", "prenom"):
+        return
+    connexion.exec_driver_sql(
+        "UPDATE client SET nom = trim(prenom || ' ' || nom) WHERE prenom IS NOT NULL AND trim(prenom) != ''"
+    )
+    connexion.exec_driver_sql("ALTER TABLE client DROP COLUMN prenom")
 
 
 @contextmanager

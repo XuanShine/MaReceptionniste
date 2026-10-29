@@ -1,0 +1,4 @@
+<form id="form-note" class="flex items-end gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3" method="post" action="/reservations/{{ fiche.id }}/notes" hx-post="/reservations/{{ fiche.id }}/notes" hx-swap="none" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  <input class="champ flex-1" name="description" placeholder="Ajouter une note au journal" aria-label="Ajouter une note au journal">
+  <button class="btn btn-primary" type="submit"><span class="material-icons text-[1.1rem]">edit_note</span>Ajouter la note</button>
+</form>

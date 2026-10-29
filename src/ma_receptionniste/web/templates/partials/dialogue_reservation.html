@@ -1,0 +1,20 @@
+{% from "macros.html" import boite with context %}
+{% call boite("w-[26rem]") %}
+<h2 class="text-base font-semibold">Nouvelle réservation</h2>
+<form class="mt-4 flex flex-col gap-4" method="post" action="/reservations" hx-post="/reservations" hx-swap="none">
+  <label class="flex flex-col gap-1 text-sm">Client
+    <select class="champ" name="client_id">
+      {% for identifiant, libelle in clients.items() %}
+      <option value="{{ identifiant }}" {% if loop.first %}selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <span class="flex items-center justify-between">
+    <a class="text-sm text-primary no-underline hover:underline" href="/clients">Nouveau client</a>
+    <span class="flex gap-2">
+      <button type="button" class="btn btn-flat" onclick="document.getElementById('dialogue').replaceChildren()">Annuler</button>
+      <button class="btn btn-primary" type="submit">Créer et ouvrir la fiche</button>
+    </span>
+  </span>
+</form>
+{% endcall %}

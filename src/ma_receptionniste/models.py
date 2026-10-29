@@ -38,7 +38,6 @@ class User(SQLModel, table=True):
 class Client(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     nom: str = Field(index=True)
-    prenom: str | None = None
     pays: str | None = None
     telephone: str | None = None
     email: str | None = None

@@ -1,0 +1,6 @@
+<form id="form-consommation" class="flex items-end gap-2 bg-slate-50 px-4 py-3" method="post" action="/reservations/{{ fiche.id }}/consommations" hx-post="/reservations/{{ fiche.id }}/consommations" hx-swap="none" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  <input class="champ w-64" name="libelle" list="consommations-courantes" placeholder="Libellé" aria-label="Libellé">
+  <input class="champ w-24" name="quantite" type="number" min="1" step="1" value="1" aria-label="Qté">
+  <input class="champ w-36" name="prix_unitaire" type="number" min="0" step="0.01" placeholder="PU TTC" aria-label="PU TTC">
+  <button class="btn btn-primary" type="submit"><span class="material-icons text-[1.1rem]">add</span>Ajouter</button>
+</form>

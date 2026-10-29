@@ -1,0 +1,4 @@
+<p id="apercu-phrase" class="text-sm tabular-nums text-ardoise" hx-swap-oob="outerHTML">{{ apercu.phrase }}</p>
+{% if ajuste and fin %}
+<input id="ligne-depart" class="champ" name="date_fin" type="date" value="{{ fin.isoformat() }}" aria-label="Départ" hx-swap-oob="outerHTML">
+{% endif %}

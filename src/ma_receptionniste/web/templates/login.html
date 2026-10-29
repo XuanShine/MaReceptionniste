@@ -1,0 +1,16 @@
+{% extends "auth_base.html" %}
+{% block carte %}
+<form method="post" action="/login" class="flex flex-col gap-4">
+  <input type="hidden" name="redirect_to" value="{{ redirect_to }}">
+  <label class="flex flex-col gap-1">
+    <span>Email</span>
+    <input class="champ" type="email" name="email" value="{{ email or '' }}" autofocus autocomplete="username">
+  </label>
+  <label class="flex flex-col gap-1">
+    <span>Mot de passe</span>
+    <input class="champ" type="password" name="password" autocomplete="current-password">
+  </label>
+  <button class="btn btn-primary w-full" type="submit">Se connecter</button>
+</form>
+<a class="mt-4 block text-center text-sm text-primary no-underline hover:underline" href="/register">Créer un compte</a>
+{% endblock %}

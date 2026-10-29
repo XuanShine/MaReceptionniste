@@ -1,6 +1,8 @@
 # Ma Réceptionniste
 
-Application web construite avec [NiceGUI](https://nicegui.io) et [SQLModel](https://sqlmodel.tiangolo.com).
+Application web de réception. FastAPI sert les pages, Jinja et HTMX dessinent l'écran, SQLModel garde les données. Le CSS est un fichier Tailwind compilé, sans CDN.
+
+Ma Gouvernante, dans le même dépôt, reste sur NiceGUI.
 
 ## Prérequis
 
@@ -15,7 +17,7 @@ uv sync
 ## Développement
 
 ```bash
-uv run python main.py      # serveur avec rechargement auto sur http://127.0.0.1:8080
+uv run python main.py      # serveur avec rechargement auto, port 8080
 uv run pytest              # tests
 uv run ruff check --fix .  # lint
 uv run ruff format .       # formatage
@@ -23,7 +25,13 @@ uv run ruff format .       # formatage
 
 Sans rechargement auto : `uv run ma-receptionniste`.
 
-Le test d'interface (`tests/test_fiche_ui.py`) utilise la fixture `User` de NiceGUI, sans navigateur. `pyproject.toml` charge le plugin (`-p nicegui.testing.user_plugin`) et désigne `main.py` comme fichier principal.
+L'hôte par défaut est `0.0.0.0`. Le port par défaut est `8080`.
+
+Pour recompiler le CSS après un changement de classes Tailwind :
+
+```bash
+npm run build:css
+```
 
 ## Données de démonstration
 
@@ -45,7 +53,7 @@ Variables d'environnement :
 | `DATABASE_URL` | `sqlite:///ma_receptionniste.db`  |
 | `STORAGE_SECRET` | valeur de dev, **à définir en production** (signe les cookies de session) |
 | `SQL_ECHO`     | `0` (mettre `1` pour logger le SQL) |
-| `HOST`         | `127.0.0.1`                       |
+| `HOST`         | `0.0.0.0`                         |
 | `PORT`         | `8080`                            |
 | `TAXE_SEJOUR_CENTIMES` | `200` : taxe de séjour par adulte et par nuit, en centimes. Les enfants en sont exonérés. |
 
@@ -56,27 +64,27 @@ main.py                       point d'entrée de dev (reload)
 scripts/
   donnees_exemple.py          base de démonstration, relançable
 src/ma_receptionniste/
-  __init__.py                 main() : thème, pages, démarrage NiceGUI
-  auth.py                     hash des mots de passe, inscription, login, middleware
+  __init__.py                 main() : uvicorn
+  auth.py                     hash des mots de passe, inscription, authentification
   db.py                       engine, création des tables, ajout des colonnes manquantes, sessions
   models.py                   modèles SQLModel
   sejours.py                  enregistrer_sejour : seule écriture d'un séjour, contrôle des chevauchements
   facturation.py              nuits, montants, taxe de séjour, totaux, format_euros
   consultations.py            lectures prêtes à afficher : planning, listes, fiche_sejour, statut affiché
   saisie.py                   écritures journalisées : fiche, lignes, consommations, règlements, facture
-  pages/                      paquet des pages NiceGUI
-    theme.py                  palette, police, props par défaut, formats de date
-    layout.py                 page(actif, titre) : menu latéral et barre de titre
-    auth_pages.py             /login et /register
-    planning.py               /  (grille de la semaine)
-    reservations.py           /reservations
-    fiche.py                  /reservations/{id} (fiche séjour)
-    clients.py                /clients
-    chambres.py               /chambres
+  affichage.py                dates, initiales, saisie d'un montant
+  web/                        FastAPI, session, templates Jinja, HTMX
+    app.py                    create_app()
+    porte.py                  redirection vers /login
+    routes_auth.py            /login, /register, /logout
+    routes_ecrans.py          planning, dashboard, clients, chambres, réservations
+    routes_fiche.py           fiche séjour
+    templates/                pages et fragments
+    static/                   app.css, htmx.min.js, app.js, police Material Icons
 tests/
 ```
 
-Toutes les pages sauf `/login` et `/register` exigent d'être connecté (voir `PUBLIC_ROUTES` dans `auth.py`).
+Toutes les pages sauf `/login`, `/register` et `/static` exigent d'être connecté (voir `PUBLIC` dans `web/porte.py`).
 
 Les montants sont stockés en centimes entiers et affichés par `format_euros` (`13764` donne `137,64 €`).
 

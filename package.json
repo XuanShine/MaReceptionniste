@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i src/ma_receptionniste/web/static/input.css -o src/ma_receptionniste/web/static/app.css --minify"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.16",
+    "tailwindcss": "^4.1.16"
+  }
+}

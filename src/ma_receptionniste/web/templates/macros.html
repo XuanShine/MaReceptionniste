@@ -1,0 +1,28 @@
+{% macro badge(libelle, couleur, identifiant=None, hors_bande=false) %}
+<span {% if identifiant %}id="{{ identifiant }}"{% endif %} {% if hors_bande %}hx-swap-oob="outerHTML"{% endif %} class="inline-flex items-center rounded px-2 py-1 text-sm font-medium bg-{{ couleur }}-soft text-{{ couleur }}">{{ libelle }}</span>
+{% endmacro %}
+
+{% macro compte(cle, libelle, hors_bande=false) %}
+<span id="compte-{{ cle }}" {% if hors_bande %}hx-swap-oob="outerHTML"{% endif %}>{{ libelle }} ({{ fiche.compteurs[cle] }})</span>
+{% endmacro %}
+
+{% macro lecture_date(hors_bande=false) %}
+<span id="lecture-date" class="lecture" {% if hors_bande %}hx-swap-oob="outerHTML"{% endif %}>{{ fiche.reservation.date_facture|date_courte or "—" }}</span>
+{% endmacro %}
+
+{% macro lecture_numero(hors_bande=false) %}
+<span id="lecture-numero" class="lecture" {% if hors_bande %}hx-swap-oob="outerHTML"{% endif %}>{{ fiche.reservation.numero_facture or "—" }}</span>
+{% endmacro %}
+
+{% macro compte_clients(clients, hors_bande=false) %}
+<p id="compte-clients" {% if hors_bande %}hx-swap-oob="outerHTML"{% endif %} class="text-sm text-ardoise">{{ clients|length }} client{{ 's' if clients|length > 1 else '' }}</p>
+{% endmacro %}
+
+{% macro boite(largeur) %}
+<div id="dialogue" {% if oob|default(false) %}hx-swap-oob="innerHTML"{% endif %}>
+  <div class="fixed inset-0 z-40 bg-slate-900/30" onclick="document.getElementById('dialogue').replaceChildren()"></div>
+  <div role="dialog" aria-modal="true" class="fixed left-1/2 top-1/2 z-50 {{ largeur }} max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
+    {{ caller() }}
+  </div>
+</div>
+{% endmacro %}

@@ -67,7 +67,7 @@ NOTES_CAPTURE = (
 # Décalages en jours depuis aujourd'hui. Séjour : (chambre, arrivée, nuits, prix/nuit en centimes, adultes, enfants).
 RESERVATIONS = [
     {
-        "client": ("LE CLOEREC", "Bénédicte", "France", "+33 6 12 34 56 78", "b.lecloerec@formavenir.fr"),
+        "client": ("Bénédicte LE CLOEREC", "France", "+33 6 12 34 56 78", "b.lecloerec@formavenir.fr"),
         "fiche": {"partenaire": "Booking.com", "traitee": True, "notes": NOTES_CAPTURE},
         "sejours": [("406", -1, 2, 6882, 1, 0)],
         "consommations": [("Petit-déjeuner", 1, 1400)],
@@ -75,20 +75,20 @@ RESERVATIONS = [
         "note": "Client arrivé à 19h20 depuis la gare de Grasse, clé remise.",
     },
     {
-        "client": ("MARTIN", "Paul", "France", "+33 6 22 10 45 98", "paul.martin@orange.fr"),
+        "client": ("Paul MARTIN", "France", "+33 6 22 10 45 98", "paul.martin@orange.fr"),
         "fiche": {"partenaire": "Direct", "type_voiture": "Peugeot 308 grise"},
         "sejours": [("101", -2, 3, 7500, 1, 0)],
         "consommations": [("Bar : verre de rosé", 2, 650)],
         "reglements": [(ModeReglement.carte, 10000)],
     },
     {
-        "client": ("ROSSI", "Giulia", "Italie", "+39 333 456 7890", "giulia.rossi@libero.it"),
+        "client": ("Giulia ROSSI", "Italie", "+39 333 456 7890", "giulia.rossi@libero.it"),
         "fiche": {"partenaire": "Booking.com", "notes": "Late arrival around 22:00."},
         "sejours": [("102", 0, 2, 9500, 2, 0)],
         "reglements": [(ModeReglement.ota, 19000)],
     },
     {
-        "client": ("SCHMIDT", "Jonas", "Allemagne", "+49 171 2345678", "j.schmidt@web.de"),
+        "client": ("Jonas SCHMIDT", "Allemagne", "+49 171 2345678", "j.schmidt@web.de"),
         "fiche": {"partenaire": "Expedia", "traitee": True},
         "sejours": [("103", -3, 3, 9000, 2, 0)],
         "consommations": [("Petit-déjeuner", 6, 1400)],
@@ -96,65 +96,65 @@ RESERVATIONS = [
         "facturer": True,
     },
     {
-        "client": ("DUBOIS", "Claire", "France", "+33 4 93 36 12 45", None),
+        "client": ("Claire DUBOIS", "France", "+33 4 93 36 12 45", None),
         "fiche": {"partenaire": "Téléphone", "notes_internes": "Habituée, préfère le côté jardin."},
         "sejours": [("104", 1, 4, 9500, 2, 0)],
     },
     {
-        "client": ("SMITH", "Oliver", "Royaume-Uni", "+44 7700 900123", "oliver.smith@gmail.com"),
+        "client": ("Oliver SMITH", "Royaume-Uni", "+44 7700 900123", "oliver.smith@gmail.com"),
         "fiche": {"partenaire": "Booking.com", "notes": "Baby cot requested."},
         "sejours": [("105", -1, 5, 12500, 2, 1)],
         "consommations": [("Petit-déjeuner", 3, 1400)],
     },
     {
-        "client": ("GARCÍA", "Lucía", "Espagne", "+34 612 345 678", "lucia.garcia@gmail.com"),
+        "client": ("Lucía GARCÍA", "Espagne", "+34 612 345 678", "lucia.garcia@gmail.com"),
         "fiche": {"partenaire": "Expedia"},
         "sejours": [("106", 2, 3, 15500, 2, 2)],
     },
     {
-        "client": ("BERNARD", "Hugo", "France", "+33 6 45 78 12 03", "hugo.bernard@free.fr"),
+        "client": ("Hugo BERNARD", "France", "+33 6 45 78 12 03", "hugo.bernard@free.fr"),
         "fiche": {"partenaire": "Direct", "notes_tempo": "Rappeler pour l'heure d'arrivée."},
         "sejours": [("201", 0, 1, 9500, 1, 0)],
     },
     {
-        "client": ("PETIT", "Camille", "France", "+33 6 98 76 54 32", "camille.petit@gmail.com"),
+        "client": ("Camille PETIT", "France", "+33 6 98 76 54 32", "camille.petit@gmail.com"),
         "fiche": {"partenaire": "Site web", "traitee": True},
         "sejours": [("202", -4, 2, 9500, 2, 0)],
         "reglements": [(ModeReglement.especes, 19800)],
         "facturer": True,
     },
     {
-        "client": ("MOREAU", "Léa", "France", "+33 7 81 22 33 44", "lea.moreau@outlook.fr"),
+        "client": ("Léa MOREAU", "France", "+33 7 81 22 33 44", "lea.moreau@outlook.fr"),
         "fiche": {"partenaire": "Booking.com"},
         "sejours": [("202", 3, 2, 9500, 2, 0)],
     },
     {
-        "client": ("NGUYEN", "Minh", "Viêt Nam", "+84 90 123 45 67", "minh.nguyen@gmail.com"),
+        "client": ("Minh NGUYEN", "Viêt Nam", "+84 90 123 45 67", "minh.nguyen@gmail.com"),
         "fiche": {"partenaire": "Expedia", "facturation": "VIETCOM TRAVEL\n12 rue de la Paix\n75002 Paris"},
         "sejours": [("203", -1, 3, 9000, 2, 0)],
     },
     {
-        "client": ("LAURENT", "Sophie", "Suisse", "+41 79 123 45 67", "s.laurent@bluewin.ch"),
+        "client": ("Sophie LAURENT", "Suisse", "+41 79 123 45 67", "s.laurent@bluewin.ch"),
         "fiche": {"partenaire": "Téléphone"},
         "sejours": [("204", 4, 3, 21000, 2, 0)],
     },
     {
-        "client": ("FONTAINE", "Marc", "Belgique", "+32 470 12 34 56", "marc.fontaine@skynet.be"),
+        "client": ("Marc FONTAINE", "Belgique", "+32 470 12 34 56", "marc.fontaine@skynet.be"),
         "fiche": {"partenaire": "Direct", "notes": "Famille, deux chambres communicantes si possible."},
         "sejours": [("205", 0, 3, 6882, 1, 0), ("206", 0, 3, 9500, 2, 1)],
     },
     {
-        "client": ("KOWALSKA", "Anna", "Pologne", "+48 501 234 567", "anna.kowalska@wp.pl"),
+        "client": ("Anna KOWALSKA", "Pologne", "+48 501 234 567", "anna.kowalska@wp.pl"),
         "fiche": {"partenaire": "Booking.com"},
         "sejours": [("201", 2, 2, 9500, 2, 0)],
     },
     {
-        "client": ("LEROY", "Thomas", "France", "+33 6 11 22 33 44", None),
+        "client": ("Thomas LEROY", "France", "+33 6 11 22 33 44", None),
         "fiche": {"partenaire": "Booking.com"},
         "sejours": [("101", 3, 2, 6882, 1, 0)],
     },
     {
-        "client": ("BLANC", "Julie", "France", "+33 6 55 44 33 22", "julie.blanc@gmail.com"),
+        "client": ("Julie BLANC", "France", "+33 6 55 44 33 22", "julie.blanc@gmail.com"),
         "fiche": {"partenaire": "Expedia"},
         "sejours": [("103", 1, 2, 9000, 2, 0)],
         "annuler": True,
@@ -194,16 +194,16 @@ def _chambre(nom: str, position: int, type_chambre: str, prete: bool) -> int:
 
 
 def _reservation(donnees: dict, chambres: dict[str, int], user_id: int, aujourd_hui: date) -> None:
-    nom, prenom, pays, telephone, email = donnees["client"]
+    nom, pays, telephone, email = donnees["client"]
     with get_session() as session:
-        client = session.exec(select(Client).where(Client.nom == nom, Client.prenom == prenom)).first()
+        client = session.exec(select(Client).where(Client.nom == nom)).first()
         client_id = client.id if client else None
         reservation = (
             session.exec(select(Reservation).where(Reservation.client_id == client_id)).first() if client_id else None
         )
         reservation_id = reservation.id if reservation else None
     if client_id is None:
-        client_id = creer_client(nom, prenom, email, telephone, pays=pays)
+        client_id = creer_client(nom, email, telephone, pays=pays)
     if reservation_id is None:
         reservation_id = creer_reservation(client_id)
         _historique(reservation_id, user_id, "Réservation créée")

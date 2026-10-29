@@ -1,0 +1,26 @@
+<div id="totaux" class="flex items-center justify-end gap-8 border-b border-slate-200 bg-slate-50 px-6 py-3" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  {% for libelle, valeur in (
+    ("Hébergement", fiche.totaux.hebergement),
+    ("Taxe de séjour", fiche.totaux.taxe_sejour),
+    ("Consommations", fiche.totaux.consommations),
+  ) %}
+  <span class="text-right">
+    <span class="block text-xs text-ardoise">{{ libelle }}</span>
+    <span class="tabular-nums">{{ valeur|euros }}</span>
+  </span>
+  {% endfor %}
+  <span class="w-px self-stretch bg-slate-200"></span>
+  <span class="text-right">
+    <span class="block text-xs text-ardoise">Total TTC</span>
+    <span class="text-lg font-semibold tabular-nums">{{ fiche.totaux.total|euros }}</span>
+  </span>
+  <span class="text-right">
+    <span class="block text-xs text-ardoise">Réglé</span>
+    <span class="tabular-nums">{{ fiche.totaux.regle|euros }}</span>
+  </span>
+  {% set couleur = "negative" if fiche.totaux.solde > 0 else "positive" if fiche.totaux.solde == 0 else "warning" %}
+  <span class="rounded-md px-3 py-1 text-right bg-{{ couleur }}-soft text-{{ couleur }}">
+    <span class="block text-xs">Solde</span>
+    <span class="text-lg font-semibold tabular-nums">{{ fiche.totaux.solde|euros }}</span>
+  </span>
+</div>

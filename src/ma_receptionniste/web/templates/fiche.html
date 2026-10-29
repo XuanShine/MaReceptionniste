@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% from "macros.html" import badge, compte, lecture_date, lecture_numero with context %}
+{% block contenu %}
+<div class="carte">
+  {% include "partials/entete_fiche.html" %}
+  <form id="fiche-champs" method="post" action="/reservations/{{ fiche.id }}" hx-post="/reservations/{{ fiche.id }}" hx-swap="none">
+    {% if erreur %}<p class="px-6 pt-4 text-sm text-negative" role="alert">{{ erreur }}</p>{% endif %}
+    <div class="grid grid-cols-12 gap-6 px-6 py-5">
+      <div class="col-span-5 grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-center gap-x-4 gap-y-2">
+        <span class="label">Nom</span>
+        <input class="champ w-full" name="nom" placeholder="Nom" value="{{ valeurs.nom }}">
+        <span class="label">Client</span>
+        <span class="lecture">{{ fiche.client.nom_complet }} · n° {{ fiche.client.id }}</span>
+        <span class="label">Pays de nat.</span>
+        <input class="champ" name="pays" list="pays-fiche" value="{{ valeurs.pays }}">
+        <span class="label">Partenaire</span>
+        <input class="champ" name="partenaire" list="partenaires-fiche" value="{{ valeurs.partenaire }}">
+        <span class="label">Statut</span>
+        <span class="flex h-10 items-center gap-4">
+          {{ badge(statut.libelle, statut.couleur, "badge-infos") }}
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="traitee" value="1" {% if valeurs.traitee %}checked{% endif %}> Traité</label>
+        </span>
+        <span class="label">Type voiture</span>
+        <input class="champ" name="type_voiture" value="{{ valeurs.type_voiture }}">
+        <span class="label">Date facture</span>
+        {{ lecture_date() }}
+        <span class="label">N° facture</span>
+        {{ lecture_numero() }}
+      </div>
+      <div class="col-span-7 min-w-0" data-onglets>
+        {% set ouvert = "notes" if valeurs.notes else "contacts" %}
+        <div data-tabs class="flex border-b border-slate-200 bg-slate-50 text-ardoise">
+          <button type="button" data-tab="contacts" class="px-3 py-2 text-sm" aria-selected="{{ 'true' if ouvert == 'contacts' else 'false' }}">Contacts</button>
+          {% for cle, libelle in (("notes", "Notes"), ("notes_internes", "Notes internes"), ("notes_tempo", "Notes tempo"), ("facturation", "Facturation client")) %}
+          <button type="button" data-tab="{{ cle }}" class="px-3 py-2 text-sm" aria-selected="{{ 'true' if ouvert == cle else 'false' }}">
+            {{ libelle }}
+            <span class="pastille ml-1 inline-block h-1.5 w-1.5 rounded-full bg-accent {% if not valeurs[cle] %}hidden{% endif %}"></span>
+          </button>
+          {% endfor %}
+        </div>
+        <section data-panel="contacts" class="p-4" {% if ouvert != "contacts" %}hidden{% endif %}>
+          <div class="grid grid-cols-[6rem_1fr] items-start gap-x-4 gap-y-2">
+            <span class="label">Téléphone</span>
+            <input class="champ" name="telephone" value="{{ valeurs.telephone }}">
+            <span class="label">Email</span>
+            <input class="champ" name="email" value="{{ valeurs.email }}">
+            <span class="label">Adresse</span>
+            <textarea class="champ" name="adresse" rows="4">{{ valeurs.adresse }}</textarea>
+          </div>
+        </section>
+        {% for cle in ("notes", "notes_internes", "notes_tempo", "facturation") %}
+        <section data-panel="{{ cle }}" class="p-3" {% if ouvert != cle %}hidden{% endif %}>
+          <textarea class="champ w-full" name="{{ cle }}" rows="12" data-pastille="{{ cle }}">{{ valeurs[cle] }}</textarea>
+        </section>
+        {% endfor %}
+      </div>
+    </div>
+  </form>
+  <div class="border-t border-slate-200" data-onglets>
+    <div data-tabs class="flex border-b border-slate-200 px-3 text-ardoise">
+      <button type="button" data-tab="reservations" class="px-3 py-2 text-sm" aria-selected="true">{{ compte("reservations", "Réservations") }}</button>
+      <button type="button" data-tab="consommations" class="px-3 py-2 text-sm" aria-selected="false">{{ compte("consommations", "Consommations") }}</button>
+      <button type="button" data-tab="reglements" class="px-3 py-2 text-sm" aria-selected="false">{{ compte("reglements", "Règlements") }}</button>
+      <button type="button" data-tab="modifications" class="px-3 py-2 text-sm" aria-selected="false">{{ compte("modifications", "Modifications") }}</button>
+      <button type="button" class="cursor-not-allowed px-3 py-2 text-sm text-slate-300" disabled title="Non relié à une caisse">Tickets</button>
+    </div>
+    <section data-panel="reservations">
+      <form id="form-ligne" method="post" action="/reservations/{{ fiche.id }}/lignes" hx-post="/reservations/{{ fiche.id }}/lignes" hx-swap="none">
+        <table class="w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              <th class="th text-left align-bottom" rowspan="2">Type</th>
+              <th class="th text-left align-bottom" rowspan="2">Chambre</th>
+              <th class="th border-x text-center" colspan="5">Période / Prix</th>
+              <th class="th border-x text-center" colspan="3">Occupation / Taxe</th>
+              <th class="th text-right align-bottom" rowspan="2">Montant</th>
+            </tr>
+            <tr>
+              {% for titre in ("Nb nuits", "Début", "Fin", "Prix TTC/nuit", "Remise %", "Adultes", "Enfants", "Taxe de séjour") %}
+              <th class="th {{ 'text-right' if titre not in ('Début', 'Fin') else 'text-left' }}">{{ titre }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          {% with oob=false, brouillon=false %}
+          {% include "partials/tbody_persist.html" %}
+          {% include "partials/tbody_brouillon.html" %}
+          {% include "partials/tbody_pied.html" %}
+          {% endwith %}
+        </table>
+      </form>
+    </section>
+    <section data-panel="consommations" hidden>
+      {% include "partials/consommations.html" %}
+      {% include "partials/form_consommation.html" %}
+    </section>
+    <section data-panel="reglements" hidden>
+      {% include "partials/totaux.html" %}
+      {% include "partials/reglements.html" %}
+      <form id="form-reglement" class="flex items-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3" method="post" action="/reservations/{{ fiche.id }}/reglements" hx-post="/reservations/{{ fiche.id }}/reglements" hx-swap="none">
+        <label class="flex flex-col gap-1 text-xs text-ardoise">Mode
+          <select class="champ w-56" name="mode">
+            {% for mode, libelle in modes %}
+            <option value="{{ mode.value }}" {% if mode.value == "carte" %}selected{% endif %}>{{ libelle }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-xs text-ardoise">Montant
+          {% include "partials/montant.html" %}
+        </label>
+        <button class="btn btn-primary" type="submit"><span class="material-icons text-[1.1rem]">add</span>Enregistrer le règlement</button>
+      </form>
+    </section>
+    <section data-panel="modifications" hidden>
+      {% include "partials/form_note.html" %}
+      {% include "partials/historique.html" %}
+    </section>
+  </div>
+  <footer class="sticky bottom-0 z-10 flex items-center gap-2 rounded-b-lg border-t border-slate-200 bg-white px-6 py-3">
+    {% include "partials/actions.html" %}
+    <span class="flex-1"></span>
+    <span class="mr-2 text-xs text-slate-400">Ctrl+S confirme · Échap abandonne</span>
+    <button id="confirmer" class="btn btn-primary" type="submit" form="fiche-champs" name="ensuite" value="rester">
+      <span class="material-icons text-[1.1rem]">check</span>Confirmer
+    </button>
+    <button class="btn btn-outline" type="submit" form="fiche-champs" name="ensuite" value="planning">Ok</button>
+    <button id="abandon" class="btn btn-flat" type="button" hx-post="/reservations/{{ fiche.id }}/abandon" hx-include="#fiche-champs" hx-swap="none">Abandon</button>
+  </footer>
+</div>
+{% include "partials/dialogue_annulation.html" %}
+<datalist id="pays-fiche">{% for pays in pays_courants %}<option value="{{ pays }}"></option>{% endfor %}</datalist>
+<datalist id="partenaires-fiche">{% for partenaire in partenaires %}<option value="{{ partenaire }}"></option>{% endfor %}</datalist>
+<datalist id="consommations-courantes">{% for libelle in consommations_courantes %}<option value="{{ libelle }}"></option>{% endfor %}</datalist>
+{% endblock %}

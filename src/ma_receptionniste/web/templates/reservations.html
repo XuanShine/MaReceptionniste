@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block contenu %}
+<section class="carte px-4 py-3">
+  {% if not clients %}
+  <div class="flex flex-col items-center gap-2 py-10 text-ardoise">
+    <span class="material-icons text-4xl text-slate-300">person_add</span>
+    <p class="text-sm">Ajoutez un client avant de créer une réservation.</p>
+    <a class="text-sm font-medium text-primary no-underline hover:underline" href="/clients">Ajouter un client</a>
+  </div>
+  {% else %}
+  <form class="flex items-center gap-3" method="post" action="/reservations">
+    <span class="material-icons text-primary">add_circle</span>
+    <span class="whitespace-nowrap text-sm text-ardoise">Nouvelle réservation pour</span>
+    <select class="champ w-80" name="client_id">
+      {% for identifiant, libelle in clients.items() %}
+      <option value="{{ identifiant }}" {% if loop.first %}selected{% endif %}>{{ libelle }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-primary" type="submit">Créer</button>
+  </form>
+  {% endif %}
+</section>
+<section class="carte">
+  <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+    <p class="text-sm text-ardoise">{{ reservations|length }} réservation{{ 's' if reservations|length > 1 else '' }}</p>
+    <input class="champ w-96" data-filtre="table-reservations" placeholder="Rechercher un client, une chambre, un canal…" aria-label="Rechercher une réservation">
+  </div>
+  {% if reservations %}
+  <table id="table-reservations" class="w-full text-sm">
+    <thead>
+      <tr>
+        {% for titre in ("Client", "Canal", "Chambres", "Arrivée", "Départ", "Nuits", "Statut", "Total TTC") %}
+        <th class="th {{ 'text-right' if titre in ('Nuits', 'Total TTC') else 'text-left' }}">{{ titre }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for reservation in reservations %}
+      <tr class="cursor-pointer hover:bg-slate-50" data-href="/reservations/{{ reservation.id }}" data-filtre-ligne>
+        <td class="td"><a class="font-medium text-slate-800 no-underline" href="/reservations/{{ reservation.id }}">{{ reservation.client }}</a></td>
+        <td class="td">{{ reservation.canal }}</td>
+        <td class="td">{{ reservation.chambres }}</td>
+        <td class="td">{{ reservation.arrivee }}</td>
+        <td class="td">{{ reservation.depart }}</td>
+        <td class="td text-right">{{ reservation.nuits }}</td>
+        <td class="td"><span class="inline-flex rounded px-2 py-1 text-sm font-medium bg-{{ reservation.couleur }}-soft text-{{ reservation.couleur }}">{{ reservation.statut }}</span></td>
+        <td class="td text-right">{{ reservation.total }}</td>
+      </tr>
+      {% endfor %}
+      <tr id="table-reservations-vide" hidden><td class="td text-center text-ardoise" colspan="8">Aucune réservation ne correspond</td></tr>
+    </tbody>
+  </table>
+  {% else %}
+  <div class="flex flex-col items-center gap-2 py-10 text-ardoise">
+    <span class="material-icons text-4xl text-slate-300">book_online</span>
+    <p class="text-sm">Aucune réservation pour l'instant.</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

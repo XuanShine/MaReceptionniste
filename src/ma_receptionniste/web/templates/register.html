@@ -1,0 +1,23 @@
+{% extends "auth_base.html" %}
+{% block carte %}
+<form method="post" action="/register" class="flex flex-col gap-4">
+  <label class="flex flex-col gap-1">
+    <span>Nom</span>
+    <input class="champ" name="nom" value="{{ nom or '' }}" autofocus autocomplete="name">
+  </label>
+  <label class="flex flex-col gap-1">
+    <span>Email</span>
+    <input class="champ" type="email" name="email" value="{{ email or '' }}" autocomplete="username">
+  </label>
+  <label class="flex flex-col gap-1">
+    <span>Mot de passe</span>
+    <input class="champ" type="password" name="password" autocomplete="new-password">
+  </label>
+  <label class="flex flex-col gap-1">
+    <span>Confirmer le mot de passe</span>
+    <input class="champ" type="password" name="confirmation" autocomplete="new-password">
+  </label>
+  <button class="btn btn-primary w-full" type="submit">S'inscrire</button>
+</form>
+<a class="mt-4 block text-center text-sm text-primary no-underline hover:underline" href="/login">Déjà un compte ? Se connecter</a>
+{% endblock %}

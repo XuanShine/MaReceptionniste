@@ -1,15 +1,19 @@
 [project]
 name = "ma-receptionniste"
 version = "0.1.0"
-description = "Application de réception (NiceGUI + SQLModel)"
+description = "Application de réception (FastAPI + HTMX + SQLModel)"
 readme = "README.md"
 authors = [
     { name = "XuanShine", email = "xuan.ng@hotmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.143.3",
+    "jinja2>=3.1.6",
     "nicegui>=3.18.0",
+    "python-multipart>=0.0.32",
     "sqlmodel>=0.0.48",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
@@ -22,6 +26,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.17.1",
@@ -35,7 +40,5 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-p nicegui.testing.user_plugin"
-main_file = "main.py"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

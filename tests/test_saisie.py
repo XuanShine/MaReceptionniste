@@ -39,7 +39,7 @@ def reception(base) -> int:
 
 
 def nouvelle_reservation() -> int:
-    return creer_reservation(creer_client("LE CLOEREC", "Benedicte"))
+    return creer_reservation(creer_client("LE CLOEREC"))
 
 
 def descriptions(reservation_id: int) -> list[str]:
@@ -53,8 +53,7 @@ def test_enregistrer_fiche_ecrit_et_journalise_les_champs_changes(reception: int
         reservation_id,
         reception,
         {
-            "nom": "LE CLOEREC",
-            "prenom": "Bénédicte",
+            "nom": "Bénédicte LE CLOEREC",
             "pays": "France",
             "partenaire": "  Booking.com ",
             "traitee": False,
@@ -63,15 +62,16 @@ def test_enregistrer_fiche_ecrit_et_journalise_les_champs_changes(reception: int
         },
     )
 
-    assert modifies == ["Prénom", "Pays de nat.", "Partenaire", "Notes"]
+    assert modifies == ["Nom", "Pays de nat.", "Partenaire", "Notes"]
     fiche = fiche_sejour(reservation_id, JOUR)
-    assert fiche["client"]["prenom"] == "Bénédicte"
+    assert fiche["client"]["nom"] == "Bénédicte LE CLOEREC"
+    assert fiche["client"]["nom_complet"] == "Bénédicte LE CLOEREC"
     assert fiche["client"]["pays"] == "France"
     assert fiche["reservation"]["partenaire"] == "Booking.com"
     assert fiche["reservation"]["notes"] == "arrivé : 19h20"
     assert fiche["reservation"]["notes_internes"] is None
     assert [(note["description"], note["auteur"]) for note in fiche["historique"]] == [
-        ("Fiche modifiée : Prénom, Pays de nat., Partenaire, Notes", "Réception")
+        ("Fiche modifiée : Nom, Pays de nat., Partenaire, Notes", "Réception")
     ]
 
 

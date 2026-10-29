@@ -67,7 +67,7 @@ def colonnes_indexees(session: Session, table: str) -> set[str]:
 
 def dossier(session: Session, *, nom_chambre: str = "101", position: int = 1):
     """Un client, une chambre et une réservation confirmée, prêts pour un séjour."""
-    client = Client(nom="Dupont", prenom="Alice")
+    client = Client(nom="Dupont")
     chambre = Chambre(nom=nom_chambre, position=position)
     session.add(client)
     session.add(chambre)
@@ -298,7 +298,6 @@ def test_valeurs_par_defaut(session: Session) -> None:
     # SQLModel refuse un datetime sans fuseau : la valeur stockée est en UTC.
     assert reservation.date_creation.tzinfo is not None
     # Les champs ajoutés au client restent facultatifs.
-    assert client.prenom is None
     assert client.adresse is None
     assert client.notes is None
 

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "macros.html" import compte_clients with context %}
+{% block contenu %}
+<form id="form-client" class="carte flex flex-col gap-3 px-4 py-3" method="post" action="/clients" hx-post="/clients" hx-swap="none">
+  <p class="text-sm font-semibold">Nouveau client</p>
+  <div class="grid grid-cols-4 gap-3">
+    <label class="flex flex-col gap-1"><span>Nom *</span><input class="champ" name="nom"></label>
+    <label class="flex flex-col gap-1"><span>Pays de nationalité</span><input class="champ" name="pays" list="pays-courants"></label>
+    <label class="flex flex-col gap-1"><span>Téléphone</span><input class="champ" name="telephone"></label>
+    <label class="flex flex-col gap-1"><span>Email</span><input class="champ" name="email"></label>
+    <label class="col-span-2 flex flex-col gap-1"><span>Adresse</span><input class="champ" name="adresse"></label>
+    <label class="flex flex-col gap-1"><span>Notes</span><input class="champ" name="notes"></label>
+  </div>
+  <div class="flex justify-end">
+    <button class="btn btn-primary" type="submit"><span class="material-icons text-[1.1rem]">person_add</span>Ajouter le client</button>
+  </div>
+</form>
+<datalist id="pays-courants">{% for pays in pays_courants %}<option value="{{ pays }}"></option>{% endfor %}</datalist>
+<section class="carte">
+  <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+    {{ compte_clients(clients) }}
+    <input class="champ w-96" data-filtre="table-clients" placeholder="Rechercher un client…" aria-label="Rechercher un client">
+  </div>
+  {% include "partials/liste_clients.html" %}
+</section>
+{% endblock %}

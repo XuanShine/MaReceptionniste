@@ -1,0 +1,16 @@
+<div id="table-reglements" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  <table class="w-full border-collapse text-sm">
+    <thead><tr>{% for titre in ("Date", "Mode", "Montant") %}<th class="th {{ 'text-right' if titre == 'Montant' else 'text-left' }} {{ 'w-full' if titre == 'Mode' else '' }}">{{ titre }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for reglement in fiche.reglements %}
+      <tr class="hover:bg-slate-50">
+        <td class="td">{{ reglement.date|date_courte }}</td>
+        <td class="td w-full">{{ reglement.mode|libelle_mode }}</td>
+        <td class="td text-right font-semibold">{{ reglement.montant_centimes|euros }}</td>
+      </tr>
+      {% else %}
+      <tr><td class="td text-center text-ardoise" colspan="3">Aucun règlement.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

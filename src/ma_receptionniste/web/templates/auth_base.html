@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ titre }} · Ma Réceptionniste</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="bg-fond text-sm text-slate-800 antialiased">
+  <main class="flex min-h-screen items-center justify-center p-6">
+    <div class="flex w-[24rem] max-w-full flex-col items-center gap-6">
+      <div class="text-center">
+        <p class="text-2xl font-semibold text-primary">Hôtel Panorama</p>
+        <p class="text-sm tracking-wide text-ardoise">Ma Réceptionniste</p>
+      </div>
+      <section class="carte w-full p-6">
+        <h1 class="mb-4 text-base font-semibold">{{ titre_carte }}</h1>
+        {% if erreur %}<p class="mb-3 text-sm text-negative" role="alert">{{ erreur }}</p>{% endif %}
+        {% block carte %}{% endblock %}
+      </section>
+    </div>
+  </main>
+</body>
+</html>

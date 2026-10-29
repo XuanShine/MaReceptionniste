@@ -77,7 +77,9 @@ def test_ancienne_base_recoit_les_nouvelles_colonnes() -> None:
         reservation = session.get(Reservation, 1)
         sejour = session.get(Sejour, 1)
 
-        assert (client.nom, client.prenom, client.pays) == ("Dupont", "Alice", None)
+        assert (client.nom, client.pays) == ("Alice Dupont", None)
+        colonnes = [ligne[1] for ligne in session.connection().exec_driver_sql("PRAGMA table_info('client')")]
+        assert "prenom" not in colonnes
         assert (chambre.nom, chambre.type_chambre) == ("101", None)
         assert reservation.statut == "confirmee"
         assert reservation.traitee is False

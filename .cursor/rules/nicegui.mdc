@@ -1,33 +1,26 @@
 ---
-description: Référence NiceGUI (llms.md) à suivre pour tout code UI du projet
+description: NiceGUI reste pour ma_gouvernante. ma_receptionniste est en FastAPI, HTMX et Tailwind.
 alwaysApply: true
 ---
 
-# NiceGUI
+# Interface
 
-Ce projet utilise NiceGUI. La référence officielle pour la version installée est @llms.md
-(copie de `nicegui/llms.md` du paquet ; la relire avant d'écrire ou modifier du code NiceGUI).
+`ma_gouvernante` utilise NiceGUI. La référence pour ce paquet est @llms.md
+(copie de `nicegui/llms.md` ; la relire avant d'écrire ou modifier du code NiceGUI).
 
-Points à ne jamais oublier :
+`ma_receptionniste` utilise FastAPI, des templates Jinja, HTMX et un CSS Tailwind compilé en local.
+Pas de CDN. Les fichiers statiques vivent dans `src/ma_receptionniste/web/static`.
 
-- **Python d'abord** : `ui.*`, `.classes()` (Tailwind/Quasar), `.props()` avant CSS brut, `ui.add_head_html` ou `ui.run_javascript`.
-- **Pas d'état global mutable** : état par utilisateur dans des variables locales du `@ui.page` ou `app.storage.user`.
-- **Ne pas bloquer la boucle asyncio** : I/O bloquant (SQLModel synchrone, hash de mot de passe…) via `await run.io_bound(fn, *args)`, calcul lourd via `run.cpu_bound`.
+Points communs :
+
+- **Pas d'état global mutable** : état par utilisateur dans la session signée (`STORAGE_SECRET`) ou dans des variables locales de la requête.
+- **Ne pas bloquer la boucle asyncio** : I/O bloquant (SQLModel synchrone, hash de mot de passe) via `await run_in_threadpool` côté réceptionniste, `await run.io_bound` côté gouvernante.
+
+Côté gouvernante seulement :
+
+- **Python d'abord** : `ui.*`, `.classes()`, `.props()` avant CSS brut.
 - **Tâches de fond** : `background_tasks.create(...)`, jamais `asyncio.create_task`.
-- **Mises à jour UI** : bindings ou `.set_text()`/`.set_value()` pour une valeur, `@ui.refreshable` pour reconstruire une section.
 - **Page builder** : timeout de 3 s ; charger les données lentes en tâche de fond.
-- **Tests UI** : fixture `User` de `nicegui.testing` (sans navigateur), `Screen` seulement si un vrai rendu JS est nécessaire.
-
-```python
-# ❌ bloque tous les utilisateurs
-def ajouter():
-    with get_session() as session:
-        session.add(client); session.commit()
-
-# ✅
-async def ajouter():
-    await run.io_bound(enregistrer_client, client)
-```
 
 Si la version de NiceGUI change (`uv lock --upgrade`), recopier le fichier :
 `cp .venv/lib/python3.12/site-packages/nicegui/llms.md llms.md`

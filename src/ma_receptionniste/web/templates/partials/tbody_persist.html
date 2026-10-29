@@ -1,0 +1,23 @@
+{% if oob|default(false) %}<table>{% endif %}
+<tbody id="lignes-persist" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  {% for ligne in fiche.lignes %}
+  <tr class="cursor-pointer hover:bg-primary-pale" hx-get="/reservations/{{ fiche.id }}/lignes/{{ ligne.id }}" hx-swap="none">
+    <td class="td text-left">{{ ligne.type_chambre or "—" }}</td>
+    <td class="td text-left">{{ ligne.chambre_nom }}{% if ligne.nom_client %} · {{ ligne.nom_client }}{% endif %}</td>
+    <td class="td text-right">{{ ligne.nuits }}</td>
+    <td class="td text-left">{{ ligne.date_debut|date_courte }}</td>
+    <td class="td text-left">{{ ligne.date_fin|date_courte }}</td>
+    <td class="td text-right">{{ ligne.prix_nuit_centimes|euros }}</td>
+    <td class="td text-right">{{ ligne.remise_pct ~ " %" if ligne.remise_pct else "—" }}</td>
+    <td class="td text-right">{{ ligne.adultes }}</td>
+    <td class="td text-right">{{ ligne.enfants }}</td>
+    <td class="td text-right">{{ ligne.taxe|euros }}</td>
+    <td class="td text-right font-semibold">{{ ligne.montant|euros }}</td>
+  </tr>
+  {% else %}
+  {% if not brouillon|default(false) %}
+  <tr><td class="td text-center text-ardoise" colspan="11">Aucune ligne de séjour pour l'instant.</td></tr>
+  {% endif %}
+  {% endfor %}
+</tbody>
+{% if oob|default(false) %}</table>{% endif %}

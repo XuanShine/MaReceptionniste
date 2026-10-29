@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block contenu %}
+<div class="flex flex-col items-center gap-2 py-10 text-ardoise">
+  <span class="material-icons text-4xl text-slate-300">search_off</span>
+  <p class="text-sm">La réservation n° {{ reservation_id }} n'existe pas.</p>
+  <a class="text-sm font-medium text-primary no-underline hover:underline" href="/reservations">Voir les réservations</a>
+</div>
+{% endblock %}

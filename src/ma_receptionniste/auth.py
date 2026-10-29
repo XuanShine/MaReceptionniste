@@ -2,16 +2,10 @@ import hashlib
 import hmac
 import secrets
 
-from fastapi import Request
-from fastapi.responses import RedirectResponse
-from nicegui import app
 from sqlmodel import Session, select
-from starlette.middleware.base import BaseHTTPMiddleware
 
-from ma_receptionniste.db import get_session
 from ma_receptionniste.models import User
 
-PUBLIC_ROUTES = {"/login", "/register"}
 MIN_PASSWORD_LENGTH = 4
 
 _SCRYPT_N, _SCRYPT_R, _SCRYPT_P = 2**14, 8, 1
@@ -60,31 +54,7 @@ def authenticate(session: Session, email: str, password: str) -> User | None:
     return user
 
 
-def login_user(user: User) -> None:
-    app.storage.user.update(user_id=user.id, nom=user.nom)
-
-
-def logout_user() -> None:
-    app.storage.user.clear()
-
-
-def current_user() -> User | None:
-    user_id = app.storage.user.get("user_id")
-    if user_id is None:
-        return None
-    with get_session() as session:
-        return session.get(User, user_id)
-
-
 def safe_redirect(target: str | None) -> str:
     if not target or not target.startswith("/") or target.startswith("//"):
         return "/"
     return target
-
-
-class AuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        path = request.url.path
-        if "user_id" not in app.storage.user and path not in PUBLIC_ROUTES and not path.startswith("/_nicegui"):
-            return RedirectResponse(f"/login?redirect_to={path}")
-        return await call_next(request)

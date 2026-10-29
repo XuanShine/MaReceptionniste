@@ -1,0 +1,5 @@
+<div id="toasts" class="pointer-events-none fixed right-4 top-4 z-50 flex flex-col gap-2" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  {% if flash %}
+  <div role="status" class="pointer-events-auto rounded-md px-4 py-2 text-sm shadow {% if flash.type == 'positive' %}bg-positive-soft text-positive{% elif flash.type == 'negative' %}bg-negative-soft text-negative{% elif flash.type == 'warning' %}bg-warning-soft text-warning{% else %}border border-slate-200 bg-white text-slate-700{% endif %}">{{ flash.texte }}</div>
+  {% endif %}
+</div>

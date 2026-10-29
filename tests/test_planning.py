@@ -31,7 +31,7 @@ def session():
 
 def test_planning_compte_les_nuits_et_ignore_les_annulees(session: Session) -> None:
     # Du 10 au 12 : nuits du 10 et du 11. Le 12 est le matin du départ.
-    client = Client(nom="Dupont", prenom="Alice")
+    client = Client(nom="Alice Dupont")
     chambre = Chambre(nom="101", position=1)
     autre = Chambre(nom="102", position=2)
     session.add(client)

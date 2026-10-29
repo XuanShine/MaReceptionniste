@@ -1,0 +1,19 @@
+{% if oob|default(false) %}<table>{% endif %}
+<tbody id="lignes-pied" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  <tr>
+    <td class="border-b border-slate-100 px-3 py-1" colspan="11">
+      {% if brouillon|default(false) %}
+      <span class="flex items-center gap-2">
+        <button class="btn btn-primary" type="submit">Enregistrer</button>
+        <button class="btn btn-flat" type="button" hx-get="/reservations/{{ fiche.id }}/lignes/annuler" hx-swap="none">Annuler</button>
+      </span>
+      {% else %}
+      <button class="inline-flex items-center gap-1 font-medium text-primary" type="button" hx-get="/reservations/{{ fiche.id }}/lignes/nouvelle" hx-swap="none">
+        <span class="material-icons text-[1.1rem]">add</span>
+        Ajouter une nouvelle ligne
+      </button>
+      {% endif %}
+    </td>
+  </tr>
+</tbody>
+{% if oob|default(false) %}</table>{% endif %}

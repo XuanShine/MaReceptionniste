@@ -1,0 +1,7 @@
+<span id="apercu-type" hx-swap-oob="outerHTML">{{ apercu.type }}</span>
+<span id="apercu-nuits" hx-swap-oob="outerHTML">{{ apercu.nuits }}</span>
+<span id="apercu-taxe" hx-swap-oob="outerHTML">{{ apercu.taxe }}</span>
+<span id="apercu-montant" hx-swap-oob="outerHTML">{{ apercu.montant }}</span>
+{% if ajuste and fin %}
+<input id="brouillon-depart" class="champ w-28" name="date_fin" type="date" value="{{ fin.isoformat() }}" aria-label="Départ" hx-swap-oob="outerHTML">
+{% endif %}

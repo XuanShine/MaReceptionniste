@@ -1,0 +1,35 @@
+{% if oob|default(false) %}<table>{% endif %}
+<tbody id="lignes-brouillon" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}
+  {% if brouillon|default(false) %}
+  hx-get="/reservations/{{ fiche.id }}/lignes/apercu"
+  hx-trigger="input delay:200ms from:find input, change from:find select"
+  hx-include="#form-ligne"
+  hx-swap="none"
+  {% endif %}>
+  {% if brouillon|default(false) %}
+  <tr>
+    <td class="td text-left"><span id="apercu-type">{{ apercu.type }}</span></td>
+    <td class="border-b border-slate-100 px-1 py-0.5">
+      <span class="flex items-center gap-1">
+        <select class="champ w-40" name="chambre_id">
+          <option value="">Chambre</option>
+          {% for chambre in chambres %}
+          <option value="{{ chambre.id }}">{{ chambre.nom }}{% if chambre.type_chambre %} · {{ chambre.type_chambre }}{% endif %}</option>
+          {% endfor %}
+        </select>
+        <input class="champ w-28" name="nom_client" placeholder="Nom" aria-label="Nom sur le séjour">
+      </span>
+    </td>
+    <td class="td text-right"><span id="apercu-nuits">{{ apercu.nuits }}</span></td>
+    <td class="border-b border-slate-100 px-1"><input class="champ w-28" name="date_debut" type="date" value="{{ debut.isoformat() }}" aria-label="Arrivée"></td>
+    <td class="border-b border-slate-100 px-1"><input id="brouillon-depart" class="champ w-28" name="date_fin" type="date" value="{{ fin.isoformat() }}" aria-label="Départ"></td>
+    <td class="border-b border-slate-100 px-1"><input class="champ w-24" name="prix" type="number" min="0" step="0.01" value="0.00" aria-label="Prix TTC/nuit"></td>
+    <td class="border-b border-slate-100 px-1"><input class="champ w-16" name="remise" type="number" min="0" max="100" step="1" value="0" aria-label="Remise"></td>
+    <td class="border-b border-slate-100 px-1"><input class="champ w-14" name="adultes" type="number" min="0" step="1" value="1" aria-label="Adultes"></td>
+    <td class="border-b border-slate-100 px-1"><input class="champ w-14" name="enfants" type="number" min="0" step="1" value="0" aria-label="Enfants"></td>
+    <td class="td text-right"><span id="apercu-taxe">{{ apercu.taxe }}</span></td>
+    <td class="td text-right font-semibold"><span id="apercu-montant">{{ apercu.montant }}</span></td>
+  </tr>
+  {% endif %}
+</tbody>
+{% if oob|default(false) %}</table>{% endif %}

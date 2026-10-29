@@ -1,0 +1,12 @@
+<span id="fiche-actions" class="flex gap-2" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  <form method="post" action="/reservations/{{ fiche.id }}/facturer" hx-post="/reservations/{{ fiche.id }}/facturer" hx-swap="none">
+    <button class="btn btn-outline" type="submit" {% if annulee %}disabled{% endif %}>
+      <span class="material-icons text-[1.1rem]">receipt_long</span>
+      Facturer
+    </button>
+  </form>
+  <button type="button" class="btn btn-danger" data-ouvre="confirm-annulation" {% if annulee %}disabled{% endif %}>
+    <span class="material-icons text-[1.1rem]">event_busy</span>
+    Annuler la réservation
+  </button>
+</span>

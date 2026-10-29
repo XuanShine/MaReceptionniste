@@ -1,0 +1,16 @@
+<div id="table-historique" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  <table class="w-full border-collapse text-sm">
+    <thead><tr>{% for titre in ("Date", "Auteur", "Description") %}<th class="th text-left {{ 'w-full' if titre == 'Description' else '' }}">{{ titre }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for entree in fiche.historique %}
+      <tr class="hover:bg-slate-50">
+        <td class="td">{{ entree.date|date_heure }}</td>
+        <td class="td">{{ entree.auteur or "—" }}</td>
+        <td class="td w-full whitespace-pre-line">{{ entree.description }}</td>
+      </tr>
+      {% else %}
+      <tr><td class="td text-center text-ardoise" colspan="3">Aucune modification enregistrée.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

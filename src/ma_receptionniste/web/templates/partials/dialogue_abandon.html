@@ -1,0 +1,11 @@
+{% from "macros.html" import boite with context %}
+{% call boite("w-[28rem]") %}
+<h2 class="text-base font-semibold">Abandonner les modifications ?</h2>
+<p class="mt-2 text-sm text-ardoise">Les changements de la fiche qui n'ont pas été confirmés seront perdus.</p>
+<div class="mt-4 flex justify-end gap-2">
+  <button type="button" class="btn btn-flat" onclick="document.getElementById('dialogue').replaceChildren()">Retour</button>
+  <form method="post" action="/reservations/{{ fiche.id }}/quitter" hx-post="/reservations/{{ fiche.id }}/quitter" hx-swap="none">
+    <button class="btn btn-danger" type="submit">Abandonner</button>
+  </form>
+</div>
+{% endcall %}

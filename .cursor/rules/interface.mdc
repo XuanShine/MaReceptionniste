@@ -1,0 +1,12 @@
+---
+description: ma_receptionniste est en FastAPI, HTMX et Tailwind.
+alwaysApply: true
+---
+
+# Interface
+
+`ma_receptionniste` utilise FastAPI, des templates Jinja, HTMX et un CSS Tailwind compilé en local.
+Pas de CDN. Les fichiers statiques vivent dans `src/ma_receptionniste/web/static`.
+
+- **Pas d'état global mutable** : état par utilisateur dans la session signée (`STORAGE_SECRET`) ou dans des variables locales de la requête.
+- **Ne pas bloquer la boucle asyncio** : I/O bloquant (SQLModel synchrone, hash de mot de passe) via `await run_in_threadpool`.

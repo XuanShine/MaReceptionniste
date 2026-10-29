@@ -2,8 +2,6 @@
 
 Application web de réception. FastAPI sert les pages, Jinja et HTMX dessinent l'écran, SQLModel garde les données. Le CSS est un fichier Tailwind compilé, sans CDN.
 
-Ma Gouvernante, dans le même dépôt, reste sur NiceGUI.
-
 ## Prérequis
 
 - [uv](https://docs.astral.sh/uv/)

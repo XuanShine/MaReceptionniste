@@ -84,12 +84,7 @@ async def ajouter_client(request: Request):
 
 @router.get("/chambres")
 async def chambres(request: Request):
-    lignes = await run_in_threadpool(lister_chambres)
-    return page(
-        request,
-        "chambres.html",
-        {"titre": "Chambres", "actif": "/chambres", "chambres": lignes, "position": _prochaine_position(lignes)},
-    )
+    return rediriger(request, "/parametres")
 
 
 @router.post("/chambres")
@@ -100,7 +95,7 @@ async def ajouter_chambre(request: Request):
         avertissement = toast("Le nom est obligatoire", "warning")
         if hx(request):
             return fragments([], avertissement)
-        return rediriger(request, "/chambres", avertissement)
+        return rediriger(request, "/parametres", avertissement)
     position = entier(form.get("position"), 0) or 0
     try:
         await run_in_threadpool(creer_chambre, nom, position, _texte(form, "type_chambre"))
@@ -108,7 +103,7 @@ async def ajouter_chambre(request: Request):
         erreur = toast("Ce nom de chambre existe déjà", "negative")
         if hx(request):
             return fragments([], erreur)
-        return rediriger(request, "/chambres", erreur)
+        return rediriger(request, "/parametres", erreur)
     lignes = await run_in_threadpool(lister_chambres)
     confirme = toast("Chambre ajoutée", "positive")
     if hx(request):
@@ -123,7 +118,7 @@ async def ajouter_chambre(request: Request):
             ],
             confirme,
         )
-    return rediriger(request, "/chambres", confirme)
+    return rediriger(request, "/parametres", confirme)
 
 
 @router.post("/chambres/{chambre_id}/type")
@@ -153,15 +148,22 @@ async def etat_chambre(request: Request, chambre_id: int, lundi: date | None = N
     if visee == "liste-chambres" or hx(request):
         lignes = await run_in_threadpool(lister_chambres)
         return fragments([rendre("partials/liste_chambres.html", chambres=lignes, oob=True)])
-    return rediriger(request, "/chambres")
+    return rediriger(request, "/parametres")
 
 
 @router.get("/parametres")
 async def parametres(request: Request):
+    lignes = await run_in_threadpool(lister_chambres)
     return page(
         request,
         "parametres.html",
-        {"titre": "Paramètres", "actif": "/parametres", "taxe_centimes": TAXE_SEJOUR_CENTIMES},
+        {
+            "titre": "Paramètres",
+            "actif": "/parametres",
+            "taxe_centimes": TAXE_SEJOUR_CENTIMES,
+            "chambres": lignes,
+            "position": _prochaine_position(lignes),
+        },
     )
 
 

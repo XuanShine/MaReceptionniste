@@ -60,7 +60,6 @@ def _entrees(ouverte: int | None) -> tuple[dict, ...]:
             "cle": "detail",
         },
         {"href": "/clients", "libelle": "Clients", "icone": "people", "cle": "/clients"},
-        {"href": "/chambres", "libelle": "Chambres", "icone": "bed", "cle": "/chambres"},
         {"href": "/parametres", "libelle": "Paramètres", "icone": "settings", "cle": "/parametres"},
     )
 

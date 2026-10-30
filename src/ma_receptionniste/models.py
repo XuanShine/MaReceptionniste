@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import AutoString, Field, Relationship, SQLModel
 
 # La base applique RESTRICT ou SET NULL. L'ORM ne réécrit pas les liens avant un DELETE.
@@ -48,13 +49,39 @@ class Client(SQLModel, table=True):
     reservations: list["Reservation"] = Relationship(back_populates="client", sa_relationship_kwargs=_LA_BASE_DECIDE)
 
 
+class TypeChambre(SQLModel, table=True):
+    __tablename__ = "type_chambre"
+
+    id: int | None = Field(default=None, primary_key=True)
+    libelle: str = Field(unique=True)
+
+    chambres: list["Chambre"] = Relationship(back_populates="type_de_chambre", sa_relationship_kwargs=_LA_BASE_DECIDE)
+
+
+class OccupationChambre(SQLModel, table=True):
+    __tablename__ = "occupation_chambre"
+
+    id: int | None = Field(default=None, primary_key=True)
+    nombre_personnes: int
+    type_lits: str
+
+    chambres: list["Chambre"] = Relationship(back_populates="occupation", sa_relationship_kwargs=_LA_BASE_DECIDE)
+
+    __table_args__ = (UniqueConstraint("nombre_personnes", "type_lits"),)
+
+
 class Chambre(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     nom: str = Field(unique=True)
-    type_chambre: str | None = None
     position: int
     etat: EtatChambre = Field(default=EtatChambre.non_pret, sa_type=AutoString)
+    type_chambre_id: int | None = Field(default=None, foreign_key="type_chambre.id", ondelete="RESTRICT", index=True)
+    occupation_chambre_id: int | None = Field(
+        default=None, foreign_key="occupation_chambre.id", ondelete="RESTRICT", index=True
+    )
 
+    type_de_chambre: TypeChambre | None = Relationship(back_populates="chambres")
+    occupation: OccupationChambre | None = Relationship(back_populates="chambres")
     sejours: list["Sejour"] = Relationship(back_populates="chambre", sa_relationship_kwargs=_LA_BASE_DECIDE)
 
 

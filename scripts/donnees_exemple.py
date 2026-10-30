@@ -21,6 +21,7 @@ from ma_receptionniste.models import (
     Reglement,
     Reservation,
     Sejour,
+    TypeChambre,
     User,
 )
 from ma_receptionniste.saisie import (
@@ -32,6 +33,7 @@ from ma_receptionniste.saisie import (
     creer_chambre,
     creer_client,
     creer_reservation,
+    creer_type_chambre,
     enregistrer_fiche,
     facturer,
 )
@@ -182,15 +184,24 @@ def _reception() -> int:
 
 
 def _chambre(nom: str, position: int, type_chambre: str, prete: bool) -> int:
+    type_id = _type_chambre(type_chambre)
     with get_session() as session:
         chambre = session.exec(select(Chambre).where(Chambre.nom == nom)).first()
-    chambre_id = chambre.id if chambre else creer_chambre(nom, position, type_chambre)
+    chambre_id = chambre.id if chambre else creer_chambre(nom, position, type_chambre_id=type_id)
     with get_session() as session:
         chambre = session.get(Chambre, chambre_id)
         chambre.etat = EtatChambre.pret if prete else EtatChambre.non_pret
         session.add(chambre)
         session.commit()
     return chambre_id
+
+
+def _type_chambre(libelle: str) -> int:
+    with get_session() as session:
+        existant = session.exec(select(TypeChambre).where(TypeChambre.libelle == libelle)).first()
+        if existant is not None:
+            return existant.id
+    return creer_type_chambre(libelle)
 
 
 def _reservation(donnees: dict, chambres: dict[str, int], user_id: int, aujourd_hui: date) -> None:

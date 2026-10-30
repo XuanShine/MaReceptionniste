@@ -11,9 +11,11 @@ from ma_receptionniste.models import (
     Client,
     Consommation,
     ModeReglement,
+    OccupationChambre,
     Reglement,
     Reservation,
     Sejour,
+    TypeChambre,
 )
 
 ANCIEN_SCHEMA = """
@@ -80,7 +82,7 @@ def test_ancienne_base_recoit_les_nouvelles_colonnes() -> None:
         assert (client.nom, client.pays) == ("Alice Dupont", None)
         colonnes = [ligne[1] for ligne in session.connection().exec_driver_sql("PRAGMA table_info('client')")]
         assert "prenom" not in colonnes
-        assert (chambre.nom, chambre.type_chambre) == ("101", None)
+        assert (chambre.nom, chambre.type_chambre_id, chambre.occupation_chambre_id) == ("101", None, None)
         assert reservation.statut == "confirmee"
         assert reservation.traitee is False
         assert reservation.partenaire is None
@@ -152,7 +154,8 @@ def test_ancienne_base_reprend_les_montants_en_euros() -> None:
     create_db_and_tables(engine)
 
     with Session(engine) as session:
-        assert session.get(Chambre, 1).type_chambre is None
+        assert session.get(Chambre, 1).type_chambre_id is None
+        assert session.get(Chambre, 1).occupation_chambre_id is None
         assert session.get(Sejour, 1).prix_nuit_centimes == 5000
         reglements = session.exec(select(Reglement).order_by(Reglement.id)).all()
         assert [(r.mode, r.montant_centimes, r.date.date()) for r in reglements] == [
@@ -174,9 +177,58 @@ def test_ancienne_base_reprend_les_montants_en_euros() -> None:
         assert session.get(Sejour, 1).prix_nuit_centimes == 100
 
 
+def test_les_types_texte_deviennent_un_catalogue_partage() -> None:
+    engine = ancienne_base(
+        """
+        CREATE TABLE chambre (
+            id INTEGER NOT NULL, nom VARCHAR NOT NULL, type_chambre VARCHAR,
+            position INTEGER NOT NULL, etat VARCHAR NOT NULL,
+            PRIMARY KEY (id), UNIQUE (nom)
+        );
+        INSERT INTO chambre (id, nom, type_chambre, position, etat) VALUES
+            (1, '101', 'Double', 1, 'pret'),
+            (2, '102', 'Double', 2, 'pret'),
+            (3, '103', NULL, 3, 'pret'),
+            (4, '104', '   ', 4, 'pret'),
+            (5, '105', 'Single BB', 5, 'pret');
+        """
+    )
+
+    ajouter_colonnes_manquantes(engine)
+
+    with Session(engine) as session:
+        types = session.exec(select(TypeChambre).order_by(TypeChambre.libelle)).all()
+        assert [type_chambre.libelle for type_chambre in types] == ["Double", "Single BB"]
+        chambres = {chambre.nom: chambre for chambre in session.exec(select(Chambre)).all()}
+        assert chambres["101"].type_chambre_id == chambres["102"].type_chambre_id == types[0].id
+        assert chambres["105"].type_chambre_id == types[1].id
+        assert chambres["103"].type_chambre_id is None
+        assert chambres["104"].type_chambre_id is None
+        assert all(chambre.occupation_chambre_id is None for chambre in chambres.values())
+        assert session.exec(select(OccupationChambre)).all() == []
+        connexion = session.connection()
+        colonnes = [ligne[1] for ligne in connexion.exec_driver_sql("PRAGMA table_info('chambre')")]
+        assert "type_chambre" not in colonnes
+        cles = {
+            (ligne[2], ligne[3], ligne[6]) for ligne in connexion.exec_driver_sql("PRAGMA foreign_key_list('chambre')")
+        }
+        assert ("type_chambre", "type_chambre_id", "RESTRICT") in cles
+        assert ("occupation_chambre", "occupation_chambre_id", "RESTRICT") in cles
+        ids = {type_chambre.libelle: type_chambre.id for type_chambre in types}
+
+    create_db_and_tables(engine)
+    create_db_and_tables(engine)
+
+    with Session(engine) as session:
+        encore = {type_chambre.libelle: type_chambre.id for type_chambre in session.exec(select(TypeChambre))}
+        assert encore == ids
+        cites = {chambre.type_chambre_id for chambre in session.exec(select(Chambre))}
+        assert cites == {ids["Double"], None, ids["Single BB"]}
+
+
 def test_colonne_obligatoire_sans_defaut_refusee_sans_rien_toucher() -> None:
     # position est NOT NULL sans server_default : aucune valeur sûre pour les lignes existantes.
-    # type_chambre, elle, serait ajoutable, mais la base doit rester telle quelle.
+    # Les clés de catalogue sont nullables, mais rien n'est ajouté tant qu'une colonne bloque.
     engine = ancienne_base("CREATE TABLE chambre (id INTEGER NOT NULL, nom VARCHAR NOT NULL, PRIMARY KEY (id));")
 
     with pytest.raises(ColonneNonAjoutable):

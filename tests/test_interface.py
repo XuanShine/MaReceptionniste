@@ -6,7 +6,13 @@ from fastapi.testclient import TestClient
 from ma_receptionniste.auth import EmailDejaUtilise, register_user
 from ma_receptionniste.db import get_session
 from ma_receptionniste.facturation import format_euros
-from ma_receptionniste.saisie import ajouter_sejour, creer_chambre, creer_client, creer_reservation
+from ma_receptionniste.saisie import (
+    ajouter_sejour,
+    creer_chambre,
+    creer_client,
+    creer_reservation,
+    creer_type_chambre,
+)
 from ma_receptionniste.web.app import create_app
 
 EMAIL = "interface@hotel-panorama.fr"
@@ -42,7 +48,7 @@ def _sejour() -> int:
     _compte()
     reservation_id = creer_reservation(creer_client("Bénédicte LE CLOEREC", pays="France"))
     hier = date.today() - timedelta(days=1)
-    chambre_id = creer_chambre(f"406-{reservation_id}", 1, "Single BB")
+    chambre_id = creer_chambre(f"406-{reservation_id}", 1, type_chambre_id=creer_type_chambre("Single BB"))
     ajouter_sejour(reservation_id, chambre_id, hier, hier + timedelta(days=2), prix_nuit_centimes=6882)
     return reservation_id
 
@@ -93,7 +99,7 @@ def test_enregistrer_une_ligne_la_montre_dans_le_tableau(client: TestClient) -> 
     reservation_id = _sejour()
     _connecter(client)
     debut = date.today() + timedelta(days=10)
-    chambre_id = creer_chambre(f"407-{reservation_id}", 2, "Double")
+    chambre_id = creer_chambre(f"407-{reservation_id}", 2, type_chambre_id=creer_type_chambre("Double"))
     reponse = client.post(
         f"/reservations/{reservation_id}/lignes",
         data={
@@ -175,6 +181,44 @@ def test_confirmer_ecrit_le_journal_sans_quitter_la_fiche(client: TestClient) ->
     assert "Modifications (2)" in reponse.text
     assert "Type voiture" in reponse.text
     assert "LE CLOEREC" in reponse.text
+
+
+def _valeur_option(html: str, libelle: str) -> str:
+    avant = html.split(f">{libelle}</option>", 1)[0]
+    return avant.rsplit('value="', 1)[1].split('"', 1)[0]
+
+
+def test_les_parametres_relient_une_chambre_a_un_type_et_une_occupation(client: TestClient) -> None:
+    _connecter(client)
+    types = client.post("/types-chambres", data={"libelle": "Double"}, follow_redirects=True)
+    assert "Type ajouté" in types.text
+    occupations = client.post(
+        "/occupations-chambres",
+        data={"nombre_personnes": "2", "type_lits": "Lit double"},
+        follow_redirects=True,
+    )
+    assert "Occupation ajoutée" in occupations.text
+    page = client.post(
+        "/chambres",
+        data={
+            "nom": "12",
+            "position": "1",
+            "type_chambre_id": _valeur_option(occupations.text, "Double"),
+            "occupation_chambre_id": _valeur_option(occupations.text, "2 · Lit double"),
+        },
+        follow_redirects=True,
+    )
+    assert "Chambre ajoutée" in page.text
+    assert page.url.path == "/parametres"
+    assert "Double" in page.text
+    assert "Lit double" in page.text
+    assert 'href="/chambres"' not in page.text
+    refus = client.post(
+        f"/types-chambres/{_valeur_option(page.text, 'Double')}/supprimer",
+        follow_redirects=True,
+    )
+    assert "Ce type est utilisé par une chambre" in refus.text
+    assert "Double" in refus.text
 
 
 def test_le_menu_ouvre_les_parametres(client: TestClient) -> None:

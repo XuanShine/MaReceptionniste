@@ -17,6 +17,24 @@
     </div>
   </div>
 </section>
+<h2 class="flex items-center gap-2 text-base font-semibold">
+  <span class="material-icons text-primary">bed</span>
+  Types de chambre
+</h2>
+<p class="text-sm text-ardoise">Un type est partagé. Le renommer change le libellé de chaque chambre qui le cite.</p>
+{% include "partials/form_type_chambre.html" %}
+<section class="carte">
+  {% include "partials/liste_types_chambres.html" %}
+</section>
+<h2 class="flex items-center gap-2 text-base font-semibold">
+  <span class="material-icons text-primary">people</span>
+  Occupation chambre
+</h2>
+<p class="text-sm text-ardoise">Une occupation est partagée. La modifier change le nombre de personnes et le type de lits de chaque chambre qui la cite.</p>
+{% include "partials/form_occupation_chambre.html" %}
+<section class="carte">
+  {% include "partials/liste_occupations_chambres.html" %}
+</section>
 <h2 id="chambres" class="flex items-center gap-2 text-base font-semibold">
   <span class="material-icons text-primary">bed</span>
   Chambres

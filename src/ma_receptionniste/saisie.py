@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select, update
 
 from ma_receptionniste.consultations import MODE_REGLEMENT_LABEL
@@ -12,10 +13,12 @@ from ma_receptionniste.models import (
     EtatChambre,
     Historique,
     ModeReglement,
+    OccupationChambre,
     Reglement,
     Reservation,
     Sejour,
     StatutReservation,
+    TypeChambre,
 )
 from ma_receptionniste.sejours import enregistrer_sejour
 
@@ -44,22 +47,129 @@ class FacturationImpossible(ValueError):
     """Une réservation annulée ne reçoit pas de facture."""
 
 
-def creer_chambre(nom: str, position: int, type_chambre: str | None = None) -> int:
+class CatalogueInvalide(ValueError):
+    pass
+
+
+def creer_type_chambre(libelle: str) -> int:
+    propre = _exiger_libelle(libelle)
     with get_session() as session:
-        chambre = Chambre(nom=nom.strip(), position=position, type_chambre=_vide(type_chambre))
+        if _type_existe(session, propre):
+            raise CatalogueInvalide("Ce type existe déjà")
+        type_chambre = TypeChambre(libelle=propre)
+        session.add(type_chambre)
+        _commit_unique(session, "Ce type existe déjà")
+        return type_chambre.id
+
+
+def renommer_type_chambre(type_chambre_id: int, libelle: str) -> bool:
+    propre = _exiger_libelle(libelle)
+    with get_session() as session:
+        type_chambre = session.get(TypeChambre, type_chambre_id)
+        if type_chambre is None:
+            raise CatalogueInvalide("Ce type est introuvable")
+        if type_chambre.libelle == propre:
+            return False
+        if _type_existe(session, propre):
+            raise CatalogueInvalide("Ce type existe déjà")
+        type_chambre.libelle = propre
+        _commit_unique(session, "Ce type existe déjà")
+        return True
+
+
+def supprimer_type_chambre(type_chambre_id: int) -> None:
+    with get_session() as session:
+        type_chambre = session.get(TypeChambre, type_chambre_id)
+        if type_chambre is None:
+            raise CatalogueInvalide("Ce type est introuvable")
+        if _chambre_cite(session, Chambre.type_chambre_id, type_chambre_id):
+            raise CatalogueInvalide("Ce type est utilisé par une chambre")
+        session.delete(type_chambre)
+        _commit_utilise(session, "Ce type est utilisé par une chambre")
+
+
+def creer_occupation_chambre(nombre_personnes: int, type_lits: str) -> int:
+    personnes, lits = _exiger_occupation(nombre_personnes, type_lits)
+    with get_session() as session:
+        if _occupation_existe(session, personnes, lits):
+            raise CatalogueInvalide("Cette occupation existe déjà")
+        occupation = OccupationChambre(nombre_personnes=personnes, type_lits=lits)
+        session.add(occupation)
+        _commit_unique(session, "Cette occupation existe déjà")
+        return occupation.id
+
+
+def modifier_occupation_chambre(occupation_chambre_id: int, nombre_personnes: int, type_lits: str) -> bool:
+    personnes, lits = _exiger_occupation(nombre_personnes, type_lits)
+    with get_session() as session:
+        occupation = session.get(OccupationChambre, occupation_chambre_id)
+        if occupation is None:
+            raise CatalogueInvalide("Cette occupation est introuvable")
+        if occupation.nombre_personnes == personnes and occupation.type_lits == lits:
+            return False
+        if _occupation_existe(session, personnes, lits):
+            raise CatalogueInvalide("Cette occupation existe déjà")
+        occupation.nombre_personnes = personnes
+        occupation.type_lits = lits
+        _commit_unique(session, "Cette occupation existe déjà")
+        return True
+
+
+def supprimer_occupation_chambre(occupation_chambre_id: int) -> None:
+    with get_session() as session:
+        occupation = session.get(OccupationChambre, occupation_chambre_id)
+        if occupation is None:
+            raise CatalogueInvalide("Cette occupation est introuvable")
+        if _chambre_cite(session, Chambre.occupation_chambre_id, occupation_chambre_id):
+            raise CatalogueInvalide("Cette occupation est utilisée par une chambre")
+        session.delete(occupation)
+        _commit_utilise(session, "Cette occupation est utilisée par une chambre")
+
+
+def creer_chambre(
+    nom: str,
+    position: int,
+    *,
+    type_chambre_id: int | None = None,
+    occupation_chambre_id: int | None = None,
+) -> int:
+    with get_session() as session:
+        _exiger_liens(session, type_chambre_id, occupation_chambre_id)
+        chambre = Chambre(
+            nom=nom.strip(),
+            position=position,
+            type_chambre_id=type_chambre_id,
+            occupation_chambre_id=occupation_chambre_id,
+        )
         session.add(chambre)
-        session.commit()
+        _commit_liens(session)
         return chambre.id
 
 
-def modifier_type_chambre(chambre_id: int, type_chambre: str | None) -> None:
+def attribuer_type_chambre(chambre_id: int, type_chambre_id: int | None) -> bool:
     with get_session() as session:
         chambre = session.get(Chambre, chambre_id)
-        if chambre is None:
-            return
-        chambre.type_chambre = _vide(type_chambre)
+        if chambre is None or chambre.type_chambre_id == type_chambre_id:
+            return False
+        if type_chambre_id is not None and session.get(TypeChambre, type_chambre_id) is None:
+            raise CatalogueInvalide("Ce type est introuvable")
+        chambre.type_chambre_id = type_chambre_id
         session.add(chambre)
-        session.commit()
+        _commit_lien(session, "Ce type est introuvable")
+        return True
+
+
+def attribuer_occupation_chambre(chambre_id: int, occupation_chambre_id: int | None) -> bool:
+    with get_session() as session:
+        chambre = session.get(Chambre, chambre_id)
+        if chambre is None or chambre.occupation_chambre_id == occupation_chambre_id:
+            return False
+        if occupation_chambre_id is not None and session.get(OccupationChambre, occupation_chambre_id) is None:
+            raise CatalogueInvalide("Cette occupation est introuvable")
+        chambre.occupation_chambre_id = occupation_chambre_id
+        session.add(chambre)
+        _commit_lien(session, "Cette occupation est introuvable")
+        return True
 
 
 def basculer_etat(chambre_id: int) -> None:
@@ -298,3 +408,88 @@ def _vide(valeur: str | None) -> str | None:
         return None
     texte = valeur.strip()
     return texte or None
+
+
+def _exiger_libelle(libelle: str | None) -> str:
+    propre = _vide(libelle)
+    if propre is None:
+        raise CatalogueInvalide("Le libellé est obligatoire")
+    return propre
+
+
+def _exiger_personnes(nombre_personnes: int) -> int:
+    if nombre_personnes < 1:
+        raise CatalogueInvalide("Le nombre de personnes doit être au moins 1")
+    return nombre_personnes
+
+
+def _exiger_lits(type_lits: str | None) -> str:
+    propre = _vide(type_lits)
+    if propre is None:
+        raise CatalogueInvalide("Le type de lits est obligatoire")
+    return propre
+
+
+def _exiger_occupation(nombre_personnes: int, type_lits: str | None) -> tuple[int, str]:
+    return _exiger_personnes(nombre_personnes), _exiger_lits(type_lits)
+
+
+def _exiger_liens(session: Session, type_chambre_id: int | None, occupation_chambre_id: int | None) -> None:
+    if type_chambre_id is not None and session.get(TypeChambre, type_chambre_id) is None:
+        raise CatalogueInvalide("Ce type est introuvable")
+    if occupation_chambre_id is not None and session.get(OccupationChambre, occupation_chambre_id) is None:
+        raise CatalogueInvalide("Cette occupation est introuvable")
+
+
+def _type_existe(session: Session, libelle: str) -> bool:
+    return session.exec(select(TypeChambre.id).where(TypeChambre.libelle == libelle)).first() is not None
+
+
+def _occupation_existe(session: Session, personnes: int, lits: str) -> bool:
+    return (
+        session.exec(
+            select(OccupationChambre.id).where(
+                OccupationChambre.nombre_personnes == personnes,
+                OccupationChambre.type_lits == lits,
+            )
+        ).first()
+        is not None
+    )
+
+
+def _chambre_cite(session: Session, colonne, valeur: int) -> bool:
+    return session.exec(select(Chambre.id).where(colonne == valeur)).first() is not None
+
+
+def _commit_unique(session: Session, message: str) -> None:
+    try:
+        session.commit()
+    except IntegrityError as erreur:
+        if "unique" in str(erreur.orig).lower():
+            raise CatalogueInvalide(message) from erreur
+        raise
+
+
+def _commit_utilise(session: Session, message: str) -> None:
+    try:
+        session.commit()
+    except IntegrityError as erreur:
+        raise CatalogueInvalide(message) from erreur
+
+
+def _commit_lien(session: Session, message: str) -> None:
+    try:
+        session.commit()
+    except IntegrityError as erreur:
+        if "foreign key" in str(erreur.orig).lower():
+            raise CatalogueInvalide(message) from erreur
+        raise
+
+
+def _commit_liens(session: Session) -> None:
+    try:
+        session.commit()
+    except IntegrityError as erreur:
+        if "foreign key" in str(erreur.orig).lower():
+            raise CatalogueInvalide("Ce type ou cette occupation est introuvable") from erreur
+        raise

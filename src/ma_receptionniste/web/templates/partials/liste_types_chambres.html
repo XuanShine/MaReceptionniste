@@ -1,0 +1,23 @@
+<div id="liste-types-chambres" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  {% if not types %}
+  <div class="flex flex-col items-center gap-2 py-10 text-ardoise">
+    <span class="material-icons text-4xl text-slate-300">bed</span>
+    <p class="text-sm">Aucun type. Ajoutez le premier avec le formulaire ci-dessus.</p>
+  </div>
+  {% else %}
+  <div class="flex border-b border-slate-200 text-xs font-semibold text-ardoise">
+    <span class="flex-1 px-4 py-2">Libellé</span>
+    <span class="w-36 px-4 py-2"></span>
+  </div>
+  {% for type_chambre in types %}
+  <div class="flex items-center border-b border-slate-100">
+    <form class="flex h-11 flex-1 items-center px-4" method="post" action="/types-chambres/{{ type_chambre.id }}" hx-post="/types-chambres/{{ type_chambre.id }}" hx-trigger="blur from:find input, submit" hx-swap="none">
+      <input class="champ w-64 border-transparent hover:bg-slate-100" name="libelle" value="{{ type_chambre.libelle }}" aria-label="Libellé {{ type_chambre.libelle }}">
+    </form>
+    <form class="flex h-11 w-36 items-center justify-end px-4" method="post" action="/types-chambres/{{ type_chambre.id }}/supprimer" hx-post="/types-chambres/{{ type_chambre.id }}/supprimer" hx-swap="none">
+      <button class="btn btn-flat text-negative" type="submit">Supprimer</button>
+    </form>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>

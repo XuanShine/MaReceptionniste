@@ -59,12 +59,55 @@ def ajouter_colonnes_manquantes(engine: Engine) -> list[str]:
     with engine.begin() as connexion:
         for colonne in manquantes:
             nom_table = engine.dialect.identifier_preparer.format_table(colonne.table)
-            definition = CreateColumn(colonne).compile(dialect=engine.dialect)
+            definition = _definition_colonne(colonne, engine.dialect)
             connexion.exec_driver_sql(f"ALTER TABLE {nom_table} ADD COLUMN {definition}")
         _reprendre_valeurs_anciennes(connexion, set(ajoutees))
         _retirer_colonnes_remplacees(connexion)
         _fusionner_le_nom_client(connexion)
+        _creer_tables_catalogue(connexion)
+        _repartir_les_types_de_chambre(connexion)
+        _indexer_les_liens_chambre(connexion)
     return ajoutees
+
+
+def _definition_colonne(colonne: Column, dialect) -> str:
+    # CreateColumn sur SQLite omet REFERENCES. Sans elle, un ALTER perd le ON DELETE RESTRICT du modèle.
+    definition = str(CreateColumn(colonne).compile(dialect=dialect))
+    if not colonne.foreign_keys or "REFERENCES" in definition.upper():
+        return definition
+    cle = next(iter(colonne.foreign_keys))
+    action = cle.ondelete or "RESTRICT"
+    return f"{definition} REFERENCES {cle.column.table.name}({cle.column.name}) ON DELETE {action}"
+
+
+def _creer_tables_catalogue(connexion) -> None:
+    from ma_receptionniste.models import OccupationChambre, TypeChambre
+
+    TypeChambre.__table__.create(connexion, checkfirst=True)
+    OccupationChambre.__table__.create(connexion, checkfirst=True)
+
+
+def _repartir_les_types_de_chambre(connexion) -> None:
+    if not (_a_colonne(connexion, "chambre", "type_chambre") and _a_colonne(connexion, "chambre", "type_chambre_id")):
+        return
+    connexion.exec_driver_sql(
+        "INSERT INTO type_chambre (libelle) "
+        "SELECT DISTINCT trim(type_chambre) FROM chambre "
+        "WHERE type_chambre IS NOT NULL AND trim(type_chambre) != '' "
+        "AND trim(type_chambre) NOT IN (SELECT libelle FROM type_chambre)"
+    )
+    connexion.exec_driver_sql(
+        "UPDATE chambre SET type_chambre_id = ("
+        "SELECT id FROM type_chambre WHERE libelle = trim(chambre.type_chambre)"
+        ") WHERE type_chambre_id IS NULL AND type_chambre IS NOT NULL AND trim(type_chambre) != ''"
+    )
+    connexion.exec_driver_sql("ALTER TABLE chambre DROP COLUMN type_chambre")
+
+
+def _indexer_les_liens_chambre(connexion) -> None:
+    for nom in ("type_chambre_id", "occupation_chambre_id"):
+        if _a_colonne(connexion, "chambre", nom):
+            connexion.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS ix_chambre_{nom} ON chambre ({nom})")
 
 
 def _a_colonne(connexion, table: str, colonne: str) -> bool:

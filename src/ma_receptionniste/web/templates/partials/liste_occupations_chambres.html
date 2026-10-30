@@ -1,0 +1,29 @@
+<div id="liste-occupations-chambres" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  {% if not occupations %}
+  <div class="flex flex-col items-center gap-2 py-10 text-ardoise">
+    <span class="material-icons text-4xl text-slate-300">people</span>
+    <p class="text-sm">Aucune occupation. Ajoutez la première avec le formulaire ci-dessus.</p>
+  </div>
+  {% else %}
+  <div class="flex border-b border-slate-200 text-xs font-semibold text-ardoise">
+    <span class="w-48 px-4 py-2">Nombre de personnes</span>
+    <span class="flex-1 px-4 py-2">Type de lits</span>
+    <span class="w-36 px-4 py-2"></span>
+  </div>
+  {% for occupation in occupations %}
+  <div class="flex items-center border-b border-slate-100">
+    <form class="flex h-11 flex-1 items-center" method="post" action="/occupations-chambres/{{ occupation.id }}" hx-post="/occupations-chambres/{{ occupation.id }}" hx-trigger="blur from:find input, submit" hx-swap="none">
+      <span class="flex h-11 w-48 items-center px-4">
+        <input class="champ w-24 border-transparent hover:bg-slate-100" name="nombre_personnes" type="number" min="1" step="1" value="{{ occupation.nombre_personnes }}" aria-label="Nombre de personnes">
+      </span>
+      <span class="flex h-11 flex-1 items-center px-4">
+        <input class="champ w-64 border-transparent hover:bg-slate-100" name="type_lits" value="{{ occupation.type_lits }}" aria-label="Type de lits">
+      </span>
+    </form>
+    <form class="flex h-11 w-36 items-center justify-end px-4" method="post" action="/occupations-chambres/{{ occupation.id }}/supprimer" hx-post="/occupations-chambres/{{ occupation.id }}/supprimer" hx-swap="none">
+      <button class="btn btn-flat text-negative" type="submit">Supprimer</button>
+    </form>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>

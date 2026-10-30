@@ -1,10 +1,24 @@
 <form id="form-chambre" class="carte mb-4 flex flex-col gap-3 px-4 py-3" method="post" action="/chambres" hx-post="/chambres" hx-swap="none" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
   <p class="text-sm font-semibold">Nouvelle chambre</p>
-  <div class="flex items-end gap-3">
+  <div class="flex items-end gap-3" style="flex-wrap: wrap">
     <label class="flex w-48 flex-col gap-1 text-xs text-ardoise">Nom ou numéro *<input class="champ" name="nom"></label>
-    <label class="flex w-56 flex-col gap-1 text-xs text-ardoise">Type<input class="champ" name="type_chambre" list="types-chambres"></label>
+    <label class="flex w-56 flex-col gap-1 text-xs text-ardoise">Type de chambre
+      <select class="champ" name="type_chambre_id">
+        <option value="">Aucune</option>
+        {% for type_chambre in types %}
+        <option value="{{ type_chambre.id }}">{{ type_chambre.libelle }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="flex w-56 flex-col gap-1 text-xs text-ardoise">Occupation chambre
+      <select class="champ" name="occupation_chambre_id">
+        <option value="">Aucune</option>
+        {% for occupation in occupations %}
+        <option value="{{ occupation.id }}">{{ occupation.nombre_personnes }} · {{ occupation.type_lits }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label class="flex w-32 flex-col gap-1 text-xs text-ardoise">Position<input class="champ" name="position" type="number" min="0" step="1" value="{{ position }}"></label>
     <button class="btn btn-primary" type="submit"><span class="material-icons text-[1.1rem]">add</span>Ajouter</button>
   </div>
 </form>
-<datalist id="types-chambres">{% for type_chambre in types_chambres %}<option value="{{ type_chambre }}"></option>{% endfor %}</datalist>

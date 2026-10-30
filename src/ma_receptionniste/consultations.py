@@ -14,9 +14,11 @@ from ma_receptionniste.models import (
     EtatChambre,
     Historique,
     ModeReglement,
+    OccupationChambre,
     Reservation,
     Sejour,
     StatutReservation,
+    TypeChambre,
 )
 
 ETAT_LABEL = {
@@ -116,16 +118,26 @@ def _etat(valeur: EtatChambre | str) -> str:
     return valeur.value if isinstance(valeur, EtatChambre) else str(valeur)
 
 
+def _libelle_type(chambre: Chambre) -> str | None:
+    return chambre.type_de_chambre.libelle if chambre.type_de_chambre else None
+
+
 def _chambre_dict(chambre: Chambre) -> dict:
     etat = _etat(chambre.etat)
     return {
         "id": chambre.id,
         "nom": chambre.nom,
-        "type_chambre": chambre.type_chambre,
+        "type_chambre": _libelle_type(chambre),
+        "type_chambre_id": chambre.type_chambre_id,
+        "occupation_chambre_id": chambre.occupation_chambre_id,
         "position": chambre.position,
         "etat": etat,
         "etat_label": ETAT_LABEL.get(EtatChambre(etat), etat),
     }
+
+
+def _requete_chambres():
+    return select(Chambre).options(selectinload(Chambre.type_de_chambre)).order_by(Chambre.position, Chambre.nom)
 
 
 def _sejours_visibles(session: Session, debut: date, fin: date, aujourd_hui: date) -> list[dict]:
@@ -156,9 +168,7 @@ def _sejours_visibles(session: Session, debut: date, fin: date, aujourd_hui: dat
 
 def planning(session: Session, debut: date, fin: date, aujourd_hui: date | None = None) -> dict:
     aujourd_hui = aujourd_hui or date.today()
-    chambres = [
-        _chambre_dict(chambre) for chambre in session.exec(select(Chambre).order_by(Chambre.position, Chambre.nom))
-    ]
+    chambres = [_chambre_dict(chambre) for chambre in session.exec(_requete_chambres())]
     # La fenêtre [veille, lendemain) attrape aussi les départs du jour, dont date_fin vaut aujourd'hui.
     du_jour = _sejours_visibles(session, aujourd_hui - timedelta(days=1), aujourd_hui + timedelta(days=1), aujourd_hui)
     return {
@@ -181,8 +191,24 @@ def charger_resume() -> ResumeJour:
 
 def lister_chambres() -> list[dict]:
     with get_session() as session:
-        chambres = session.exec(select(Chambre).order_by(Chambre.position, Chambre.nom)).all()
-        return [_chambre_dict(chambre) for chambre in chambres]
+        return [_chambre_dict(chambre) for chambre in session.exec(_requete_chambres())]
+
+
+def lister_types_chambres() -> list[dict]:
+    with get_session() as session:
+        types = session.exec(select(TypeChambre).order_by(TypeChambre.libelle)).all()
+        return [{"id": type_chambre.id, "libelle": type_chambre.libelle} for type_chambre in types]
+
+
+def lister_occupations_chambres() -> list[dict]:
+    with get_session() as session:
+        occupations = session.exec(
+            select(OccupationChambre).order_by(OccupationChambre.nombre_personnes, OccupationChambre.type_lits)
+        ).all()
+        return [
+            {"id": occupation.id, "nombre_personnes": occupation.nombre_personnes, "type_lits": occupation.type_lits}
+            for occupation in occupations
+        ]
 
 
 def lister_clients() -> list[dict]:
@@ -216,7 +242,7 @@ def options_chambres() -> dict[int, str]:
 def _avec_tout(requete):
     return requete.options(
         selectinload(Reservation.client),
-        selectinload(Reservation.sejours).selectinload(Sejour.chambre),
+        selectinload(Reservation.sejours).selectinload(Sejour.chambre).selectinload(Chambre.type_de_chambre),
         selectinload(Reservation.consommations),
         selectinload(Reservation.reglements),
     )
@@ -300,7 +326,7 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
                     "id": sejour.id,
                     "chambre_id": sejour.chambre_id,
                     "chambre_nom": sejour.chambre.nom,
-                    "type_chambre": sejour.chambre.type_chambre,
+                    "type_chambre": _libelle_type(sejour.chambre),
                     "date_debut": sejour.date_debut,
                     "date_fin": sejour.date_fin,
                     "nuits": nuits(sejour.date_debut, sejour.date_fin),

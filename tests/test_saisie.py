@@ -5,9 +5,17 @@ from datetime import date
 import pytest
 from sqlmodel import Session
 
-from ma_receptionniste.consultations import StatutSejour, fiche_sejour, lister_reservations
+from ma_receptionniste.consultations import (
+    StatutSejour,
+    fiche_sejour,
+    lister_chambres,
+    lister_occupations_chambres,
+    lister_reservations,
+    lister_types_chambres,
+)
 from ma_receptionniste.models import ModeReglement, User
 from ma_receptionniste.saisie import (
+    CatalogueInvalide,
     FacturationImpossible,
     FicheInvalide,
     ajouter_consommation,
@@ -16,11 +24,16 @@ from ma_receptionniste.saisie import (
     annuler_reservation,
     creer_chambre,
     creer_client,
+    creer_occupation_chambre,
     creer_reservation,
+    creer_type_chambre,
     enregistrer_fiche,
     facturer,
+    modifier_occupation_chambre,
     modifier_sejour,
+    renommer_type_chambre,
     supprimer_sejour,
+    supprimer_type_chambre,
 )
 from ma_receptionniste.sejours import ChambreOccupee, SejourInvalide
 
@@ -116,7 +129,7 @@ def test_facturer_refuse_une_reservation_annulee(reception: int) -> None:
 
 def test_la_fiche_compte_et_totalise_comme_la_capture(reception: int) -> None:
     reservation_id = nouvelle_reservation()
-    chambre_id = creer_chambre("406", 406, "Single BB")
+    chambre_id = creer_chambre("406", 406, type_chambre_id=creer_type_chambre("Single BB"))
     ajouter_sejour(reservation_id, chambre_id, ARRIVEE, DEPART, prix_nuit_centimes=6882, user_id=reception)
     ajouter_consommation(reservation_id, "Petit-déjeuner", 1, 1400, reception)
     ajouter_reglement(reservation_id, ModeReglement.ota, 13764, reception)
@@ -174,6 +187,39 @@ def test_remise_hors_bornes_refusee(base) -> None:
     with pytest.raises(SejourInvalide):
         ajouter_sejour(reservation_id, chambre_id, ARRIVEE, DEPART, prix_nuit_centimes=6882, remise_pct=120)
     assert fiche_sejour(reservation_id, JOUR)["lignes"] == []
+
+
+def test_renommer_le_type_change_le_libelle_sur_la_fiche(reception: int) -> None:
+    reservation_id = nouvelle_reservation()
+    type_id = creer_type_chambre("Single BB")
+    chambre_id = creer_chambre("406", 406, type_chambre_id=type_id)
+    ajouter_sejour(reservation_id, chambre_id, ARRIVEE, DEPART, prix_nuit_centimes=6882)
+
+    assert fiche_sejour(reservation_id, JOUR)["lignes"][0]["type_chambre"] == "Single BB"
+    assert renommer_type_chambre(type_id, "Chambre double") is True
+    assert fiche_sejour(reservation_id, JOUR)["lignes"][0]["type_chambre"] == "Chambre double"
+
+
+def test_une_occupation_modifiee_reste_citee_par_les_deux_chambres(base) -> None:
+    occupation_id = creer_occupation_chambre(2, "Lit double")
+    creer_chambre("101", 1, occupation_chambre_id=occupation_id)
+    creer_chambre("102", 2, occupation_chambre_id=occupation_id)
+
+    assert modifier_occupation_chambre(occupation_id, 3, "Lits jumeaux") is True
+
+    assert lister_occupations_chambres() == [{"id": occupation_id, "nombre_personnes": 3, "type_lits": "Lits jumeaux"}]
+    assert {chambre["occupation_chambre_id"] for chambre in lister_chambres()} == {occupation_id}
+
+
+def test_supprimer_un_type_cite_laisse_la_ligne(base) -> None:
+    type_id = creer_type_chambre("Single BB")
+    creer_chambre("406", 406, type_chambre_id=type_id)
+
+    with pytest.raises(CatalogueInvalide, match="Ce type est utilisé par une chambre"):
+        supprimer_type_chambre(type_id)
+
+    assert lister_types_chambres() == [{"id": type_id, "libelle": "Single BB"}]
+    assert lister_chambres()[0]["type_chambre"] == "Single BB"
 
 
 def test_annuler_journalise_une_seule_fois(reception: int) -> None:

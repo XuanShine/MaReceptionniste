@@ -10,7 +10,7 @@ from ma_receptionniste.affichage import date_courte, date_heure, date_longue, in
 from ma_receptionniste.consultations import MODE_REGLEMENT_LABEL, STATUT_SEJOUR
 from ma_receptionniste.facturation import format_euros
 from ma_receptionniste.models import ModeReglement
-from ma_receptionniste.web.listes import CONSOMMATIONS_COURANTES, PARTENAIRES, PAYS_COURANTS, TYPES_CHAMBRES
+from ma_receptionniste.web.listes import CONSOMMATIONS_COURANTES, PARTENAIRES, PAYS_COURANTS
 
 DOSSIER = Path(__file__).parent
 templates = Jinja2Templates(directory=str(DOSSIER / "templates"))
@@ -24,7 +24,6 @@ templates.env.globals["statuts"] = STATUT_SEJOUR
 templates.env.globals["pays_courants"] = PAYS_COURANTS
 templates.env.globals["partenaires"] = PARTENAIRES
 templates.env.globals["consommations_courantes"] = CONSOMMATIONS_COURANTES
-templates.env.globals["types_chambres"] = TYPES_CHAMBRES
 templates.env.auto_reload = True
 
 

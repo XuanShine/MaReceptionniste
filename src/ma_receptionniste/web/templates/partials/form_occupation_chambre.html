@@ -1,0 +1,8 @@
+<form id="form-occupation-chambre" class="carte mb-4 flex flex-col gap-3 px-4 py-3" method="post" action="/occupations-chambres" hx-post="/occupations-chambres" hx-swap="none" {% if oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  <p class="text-sm font-semibold">Nouvelle occupation</p>
+  <div class="flex items-end gap-3">
+    <label class="flex w-40 flex-col gap-1 text-xs text-ardoise">Nombre de personnes<input class="champ" name="nombre_personnes" type="number" min="1" step="1"></label>
+    <label class="flex w-56 flex-col gap-1 text-xs text-ardoise">Type de lits<input class="champ" name="type_lits"></label>
+    <button class="btn btn-primary" type="submit"><span class="material-icons text-[1.1rem]">add</span>Ajouter</button>
+  </div>
+</form>

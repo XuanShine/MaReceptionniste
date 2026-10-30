@@ -57,8 +57,6 @@ def ajouter_colonnes_manquantes(engine: Engine) -> list[str]:
             )
     ajoutees = [f"{colonne.table.name}.{colonne.name}" for colonne in manquantes]
     with engine.begin() as connexion:
-        # Les ALTER des clés partent après les catalogues : SQLite refuse une REFERENCES vers une table absente.
-        _creer_tables_catalogue(connexion)
         for colonne in manquantes:
             nom_table = engine.dialect.identifier_preparer.format_table(colonne.table)
             definition = _definition_colonne(colonne, engine.dialect)
@@ -66,6 +64,7 @@ def ajouter_colonnes_manquantes(engine: Engine) -> list[str]:
         _reprendre_valeurs_anciennes(connexion, set(ajoutees))
         _retirer_colonnes_remplacees(connexion)
         _fusionner_le_nom_client(connexion)
+        _creer_tables_catalogue(connexion)
         _repartir_les_types_de_chambre(connexion)
         _indexer_les_liens_chambre(connexion)
     return ajoutees
@@ -89,7 +88,6 @@ def _creer_tables_catalogue(connexion) -> None:
 
 
 def _repartir_les_types_de_chambre(connexion) -> None:
-    """L'ancien texte devient un catalogue. On relit le schéma, pas seulement les colonnes juste ajoutées."""
     if not (_a_colonne(connexion, "chambre", "type_chambre") and _a_colonne(connexion, "chambre", "type_chambre_id")):
         return
     connexion.exec_driver_sql(

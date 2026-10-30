@@ -228,7 +228,6 @@ def test_les_types_texte_deviennent_un_catalogue_partage() -> None:
 
 def test_colonne_obligatoire_sans_defaut_refusee_sans_rien_toucher() -> None:
     # position est NOT NULL sans server_default : aucune valeur sûre pour les lignes existantes.
-    # Les clés de catalogue sont nullables, mais rien n'est ajouté tant qu'une colonne bloque.
     engine = ancienne_base("CREATE TABLE chambre (id INTEGER NOT NULL, nom VARCHAR NOT NULL, PRIMARY KEY (id));")
 
     with pytest.raises(ColonneNonAjoutable):

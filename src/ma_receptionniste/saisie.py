@@ -48,7 +48,7 @@ class FacturationImpossible(ValueError):
 
 
 class CatalogueInvalide(ValueError):
-    """Le message est affiché tel quel : libellé vide, doublon, lien inconnu ou encore cité."""
+    pass
 
 
 def creer_type_chambre(libelle: str) -> int:

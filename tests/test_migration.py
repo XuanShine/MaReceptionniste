@@ -73,6 +73,8 @@ def test_ancienne_base_recoit_les_nouvelles_colonnes() -> None:
         assert (chambre.nom, chambre.type_chambre) == ("101", None)
         assert reservation.statut == "confirmee"
         assert reservation.traitee is False
+        assert str(reservation.etat_dossier) == "en_cours"
+        assert reservation.nom_occupant is None
         assert reservation.partenaire is None
         assert reservation.numero_facture is None
         assert (sejour.date_debut, sejour.date_fin) == (date(2026, 10, 10), date(2026, 10, 12))
@@ -95,6 +97,7 @@ def test_migration_idempotente() -> None:
 
     assert "sejour.adultes" in premiere
     assert "reservation.traitee" in premiere
+    assert "reservation.etat_dossier" in premiere
     assert seconde == []
 
 

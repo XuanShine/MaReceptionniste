@@ -12,6 +12,7 @@ from ma_receptionniste.models import (
     Chambre,
     Client,
     EtatChambre,
+    EtatDossier,
     Historique,
     ModeReglement,
     Reservation,
@@ -151,7 +152,7 @@ def _sejours_visibles(session: Session, debut: date, fin: date, aujourd_hui: dat
             "reservation_id": sejour.reservation_id,
             "date_debut": sejour.date_debut,
             "date_fin": sejour.date_fin,
-            "nom": sejour.nom_client or _nom_client(client.prenom, client.nom),
+            "nom": reservation.nom_occupant or sejour.nom_client or _nom_client(client.prenom, client.nom),
             "partenaire": reservation.partenaire,
             "statut": statut_sejour(reservation.statut, sejour.date_debut, sejour.date_fin, aujourd_hui),
             "nuits": nuits_entre(sejour.date_debut, sejour.date_fin, debut, fin),
@@ -244,7 +245,8 @@ def lister_reservations(aujourd_hui: date | None = None) -> list[dict]:
             resultat.append(
                 {
                     "id": reservation.id,
-                    "client": _nom_client(reservation.client.prenom, reservation.client.nom),
+                    "client": reservation.nom_occupant
+                    or _nom_client(reservation.client.prenom, reservation.client.nom),
                     "partenaire": reservation.partenaire,
                     "chambres": ", ".join(sejour.chambre.nom for sejour in sejours),
                     "date_debut": debut,
@@ -262,7 +264,10 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
     with get_session() as session:
         reservation = session.exec(
             _avec_tout(select(Reservation))
-            .options(selectinload(Reservation.historiques).selectinload(Historique.user))
+            .options(
+                selectinload(Reservation.historiques).selectinload(Historique.user),
+                selectinload(Reservation.tickets),
+            )
             .where(Reservation.id == reservation_id)
         ).first()
         if reservation is None:
@@ -272,6 +277,7 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
         consommations = sorted(reservation.consommations, key=lambda consommation: consommation.date)
         reglements = sorted(reservation.reglements, key=lambda reglement: reglement.date)
         historique = sorted(reservation.historiques, key=lambda note: (note.date, note.id), reverse=True)
+        tickets = sorted(reservation.tickets, key=lambda ticket: (ticket.date, ticket.id), reverse=True)
         debut, fin = _bornes(sejours)
         return {
             "id": reservation.id,
@@ -289,6 +295,9 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
                 "statut": StatutReservation(str(reservation.statut)),
                 "partenaire": reservation.partenaire,
                 "traitee": reservation.traitee,
+                "etat_dossier": EtatDossier(str(reservation.etat_dossier)),
+                "nom_occupant": reservation.nom_occupant,
+                "notes_facturation": reservation.notes_facturation,
                 "type_voiture": reservation.type_voiture,
                 "date_facture": reservation.date_facture,
                 "numero_facture": reservation.numero_facture,
@@ -339,6 +348,15 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
                 }
                 for reglement in reglements
             ],
+            "tickets": [
+                {
+                    "id": ticket.id,
+                    "date": ticket.date,
+                    "objet": ticket.objet,
+                    "detail": ticket.detail,
+                }
+                for ticket in tickets
+            ],
             "historique": [
                 {
                     "id": note.id,
@@ -353,6 +371,7 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
                 "consommations": len(consommations),
                 "reglements": len(reglements),
                 "modifications": len(historique),
+                "tickets": len(tickets),
             },
             "totaux": totaux(sejours, consommations, reglements),
         }

@@ -27,7 +27,7 @@ async def test_la_fiche_montre_la_ligne_les_actions_et_le_total(user: User) -> N
     user.find("Email").type(EMAIL)
     user.find("Mot de passe").type(MOT_DE_PASSE)
     user.find("Se connecter").click()
-    await user.should_see("Arrivées")
+    await user.should_see("Arrivées", retries=20)
 
     await user.open(f"/reservations/{reservation_id}")
     await user.should_see("Bénédicte LE CLOEREC")

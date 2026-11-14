@@ -5,7 +5,7 @@ from nicegui import app, run, ui
 
 from ma_receptionniste.consultations import MODE_REGLEMENT_LABEL, STATUT_SEJOUR, fiche_sejour, options_chambres
 from ma_receptionniste.facturation import Totaux, centimes, format_euros, montant_ligne, nuits, taxe_sejour
-from ma_receptionniste.models import Client, ModeReglement, Reservation, StatutReservation
+from ma_receptionniste.models import Client, EtatDossier, ModeReglement, Reservation, StatutReservation
 from ma_receptionniste.pages.clients import PAYS_COURANTS
 from ma_receptionniste.pages.layout import badge, etat_vide, page
 from ma_receptionniste.pages.theme import date_courte, date_heure, heure_locale
@@ -17,23 +17,31 @@ from ma_receptionniste.saisie import (
     ajouter_note,
     ajouter_reglement,
     ajouter_sejour,
+    ajouter_ticket,
     annuler_reservation,
     champs_modifies,
     enregistrer_fiche,
     facturer,
     modifier_sejour,
+    reprendre_reservation,
     supprimer_sejour,
 )
 from ma_receptionniste.sejours import ChambreOccupee, SejourInvalide
 
 PARTENAIRES = ["Booking.com", "Expedia", "Airbnb", "Direct", "Téléphone", "Site web", "Agence de voyage"]
 CONSOMMATIONS_COURANTES = ["Petit-déjeuner", "Parking", "Bar", "Mini-bar", "Restaurant", "Blanchisserie"]
-ONGLETS_TEXTE = ("notes", "notes_internes", "notes_tempo", "facturation")
+ONGLETS_TEXTE = ("notes", "notes_internes", "notes_tempo", "notes_facturation", "facturation")
 ONGLETS_COMPTES = {
     "reservations": "Réservations",
     "consommations": "Consommations",
     "reglements": "Règlements",
+    "tickets": "Tickets",
     "modifications": "Modifications",
+}
+OPTIONS_ETAT_DOSSIER = {
+    EtatDossier.en_cours.value: "En cours",
+    EtatDossier.option.value: "Option",
+    EtatDossier.parti.value: "Parti",
 }
 DEFAUTS_LIGNE = {"adultes": 1, "enfants": 0, "prix_nuit_centimes": 0, "remise_pct": 0, "nom_client": None}
 
@@ -65,6 +73,11 @@ COLONNES_CONSOMMATIONS = (
     ("Montant", f"{A_DROITE} font-semibold"),
 )
 COLONNES_REGLEMENTS = (("Date", A_GAUCHE), ("Mode", f"{A_GAUCHE} w-full"), ("Montant", f"{A_DROITE} font-semibold"))
+COLONNES_TICKETS = (
+    ("Date", A_GAUCHE),
+    ("Objet", A_GAUCHE),
+    ("Détail", f"{A_GAUCHE} w-full whitespace-pre-line!"),
+)
 COLONNES_HISTORIQUE = (
     ("Date", A_GAUCHE),
     ("Auteur", A_GAUCHE),
@@ -105,12 +118,12 @@ async def fiche(reservation_id: int) -> None:
         return
     user_id = app.storage.user.get("user_id")
     enregistre = _champs(donnees)
-    valeurs = {cle: "" if valeur is None else valeur for cle, valeur in enregistre.items()}
+    valeurs = {cle: _valeur_affichee(valeur) for cle, valeur in enregistre.items()}
 
     async def recharger() -> None:
         nonlocal donnees
         donnees = await run.io_bound(fiche_sejour, reservation_id)
-        for section in (entete, infos, lignes, consommations, reglements, historique, totaux, actions):
+        for section in (entete, infos, lignes, consommations, reglements, tickets, historique, totaux, actions):
             section.refresh()
         compter()
         montant_reglement.value = _euros(max(donnees["totaux"].solde, 0))
@@ -164,6 +177,29 @@ async def fiche(reservation_id: int) -> None:
         await run.io_bound(annuler_reservation, reservation_id, user_id)
         await recharger()
         ui.notify("Réservation annulée", type="warning")
+
+    async def reprendre() -> None:
+        try:
+            await run.io_bound(reprendre_reservation, reservation_id, user_id)
+        except ChambreOccupee as erreur:
+            ui.notify(str(erreur), type="warning")
+            return
+        await recharger()
+        ui.notify("Réservation reprise", type="positive")
+
+    async def ouvrir_ticket() -> None:
+        if not (objet_ticket.value or "").strip():
+            ui.notify("L'objet du ticket est obligatoire", type="warning")
+            return
+        try:
+            await run.io_bound(ajouter_ticket, reservation_id, objet_ticket.value, detail_ticket.value, user_id)
+        except FicheInvalide as erreur:
+            ui.notify(str(erreur), type="warning")
+            return
+        objet_ticket.value = ""
+        detail_ticket.value = ""
+        await recharger()
+        ui.notify("Ticket ajouté", type="positive")
 
     async def ajouter_ligne() -> None:
         debut = donnees["debut"] or date.today()
@@ -254,6 +290,14 @@ async def fiche(reservation_id: int) -> None:
         )
 
     @ui.refreshable
+    def tickets() -> None:
+        _tableau(
+            COLONNES_TICKETS,
+            [[date_heure(ticket["date"]), ticket["objet"], ticket["detail"] or "—"] for ticket in donnees["tickets"]],
+            "Aucun ticket.",
+        )
+
+    @ui.refreshable
     def historique() -> None:
         _tableau(
             COLONNES_HISTORIQUE,
@@ -275,6 +319,7 @@ async def fiche(reservation_id: int) -> None:
         ui.button("Annuler la réservation", icon="event_busy", on_click=confirmation_annulation.open).props(
             "outline color=negative"
         ).set_enabled(not annulee)
+        ui.button("Reprendre", icon="event_available", on_click=reprendre).props("outline").set_enabled(annulee)
 
     def compter() -> None:
         for cle, onglet in onglets_comptes.items():
@@ -313,8 +358,6 @@ async def fiche(reservation_id: int) -> None:
                     .classes("w-full px-3 text-ardoise border-b border-slate-200") as onglets
                 ):
                     onglets_comptes = {cle: ui.tab(cle) for cle in ONGLETS_COMPTES}
-                    with ui.tab("tickets", "Tickets").props("disable"):
-                        ui.tooltip("Non relié à une caisse")
                 compter()
                 with ui.tab_panels(onglets, value="reservations", animated=False).classes("w-full"):
                     with ui.tab_panel("reservations").classes("p-0"):
@@ -336,6 +379,12 @@ async def fiche(reservation_id: int) -> None:
                                 "Montant", _euros(max(donnees["totaux"].solde, 0))
                             ).classes("w-36")
                             ui.button("Enregistrer le règlement", icon="add", on_click=ajouter_un_reglement)
+                    with ui.tab_panel("tickets").classes("p-0"):
+                        with _barre_saisie(haut=True):
+                            objet_ticket = ui.input("Objet").classes("w-64")
+                            detail_ticket = ui.input("Détail").classes("flex-1")
+                            ui.button("Ajouter le ticket", icon="confirmation_number", on_click=ouvrir_ticket)
+                        tickets()
                     with ui.tab_panel("modifications").classes("p-0"):
                         with _barre_saisie(haut=True):
                             note = ui.input("Ajouter une note au journal").classes("flex-1").on("keydown.enter", noter)
@@ -352,6 +401,14 @@ async def fiche(reservation_id: int) -> None:
                 ui.button("Confirmer", icon="check", on_click=confirmer)
                 ui.button("Ok", on_click=valider).props("outline")
                 ui.button("Abandon", on_click=abandonner).props("flat color=ardoise")
+
+
+def _valeur_affichee(valeur: object) -> object:
+    if valeur is None:
+        return ""
+    if isinstance(valeur, EtatDossier):
+        return valeur.value
+    return valeur
 
 
 def _champs(fiche: dict) -> dict:
@@ -371,7 +428,9 @@ def _entete(fiche: dict, retour: Callable[[], Awaitable[None]]) -> None:
     with ui.row().classes("w-full items-center gap-4 px-6 py-4 border-b border-slate-200 no-wrap"):
         with ui.column().classes("gap-1"):
             with ui.row().classes("items-center gap-3"):
-                ui.label(fiche["client"]["nom_complet"]).classes("text-2xl font-semibold leading-tight")
+                ui.label(fiche["reservation"]["nom_occupant"] or fiche["client"]["nom_complet"]).classes(
+                    "text-2xl font-semibold leading-tight"
+                )
                 badge(statut.libelle, statut.couleur)
             ui.label(" · ".join(details)).classes("text-sm text-ardoise")
         ui.space()
@@ -386,12 +445,16 @@ def _infos(fiche: dict, valeurs: dict) -> None:
         with ui.row().classes("w-full gap-2 no-wrap"):
             ui.input(placeholder="Nom").bind_value(valeurs, "nom").classes("flex-1")
             ui.input(placeholder="Prénom").bind_value(valeurs, "prenom").classes("flex-1")
+        _libelle(CHAMPS_FICHE["nom_occupant"][1])
+        ui.input(placeholder="Nom sur le planning").bind_value(valeurs, "nom_occupant")
         _libelle("Client")
         _lecture(f"{client['nom_complet']} · n° {client['id']}")
         _libelle(CHAMPS_FICHE["pays"][1])
         ui.input(autocomplete=PAYS_COURANTS).bind_value(valeurs, "pays")
         _libelle(CHAMPS_FICHE["partenaire"][1])
         ui.input(autocomplete=PARTENAIRES).bind_value(valeurs, "partenaire")
+        _libelle(CHAMPS_FICHE["etat_dossier"][1])
+        ui.select(OPTIONS_ETAT_DOSSIER).bind_value(valeurs, "etat_dossier").classes("w-48")
         _libelle("Statut")
         with ui.row().classes("h-10 items-center gap-4"):
             badge(statut.libelle, statut.couleur)

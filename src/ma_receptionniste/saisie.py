@@ -10,21 +10,25 @@ from ma_receptionniste.models import (
     Client,
     Consommation,
     EtatChambre,
+    EtatDossier,
     Historique,
     ModeReglement,
     Reglement,
     Reservation,
     Sejour,
     StatutReservation,
+    Ticket,
 )
-from ma_receptionniste.sejours import enregistrer_sejour
+from ma_receptionniste.sejours import ChambreOccupee, chambre_libre, enregistrer_sejour
 
 # Champs du haut de la fiche séjour, dans l'ordre d'affichage et du journal.
 CHAMPS_FICHE: dict[str, tuple[type[Client] | type[Reservation], str]] = {
     "nom": (Client, "Nom"),
     "prenom": (Client, "Prénom"),
     "pays": (Client, "Pays de nat."),
+    "nom_occupant": (Reservation, "Occupant"),
     "partenaire": (Reservation, "Partenaire"),
+    "etat_dossier": (Reservation, "État du dossier"),
     "traitee": (Reservation, "Traité"),
     "type_voiture": (Reservation, "Type voiture"),
     "telephone": (Client, "Téléphone"),
@@ -33,6 +37,7 @@ CHAMPS_FICHE: dict[str, tuple[type[Client] | type[Reservation], str]] = {
     "notes": (Reservation, "Notes"),
     "notes_internes": (Reservation, "Notes internes"),
     "notes_tempo": (Reservation, "Notes tempo"),
+    "notes_facturation": (Reservation, "Notes facturation"),
     "facturation": (Reservation, "Facturation client"),
 }
 
@@ -224,6 +229,34 @@ def annuler_reservation(reservation_id: int, user_id: int | None = None) -> None
         session.commit()
 
 
+def ajouter_ticket(reservation_id: int, objet: str, detail: str | None, user_id: int | None) -> None:
+    texte = _vide(objet)
+    if texte is None:
+        raise FicheInvalide("L'objet du ticket est obligatoire")
+    with get_session() as session:
+        if session.get(Reservation, reservation_id) is None:
+            raise FicheInvalide("Réservation introuvable")
+        session.add(Ticket(reservation_id=reservation_id, objet=texte, detail=_vide(detail)))
+        _journaliser(session, reservation_id, user_id, f"Ticket : {texte}")
+        session.commit()
+
+
+def reprendre_reservation(reservation_id: int, user_id: int | None) -> None:
+    """Une annulation libère les chambres : les reprendre échoue si une autre réservation les a prises."""
+    with get_session() as session:
+        reservation = session.get(Reservation, reservation_id)
+        if reservation is None or reservation.statut != StatutReservation.annulee:
+            return
+        sejours = session.exec(select(Sejour).where(Sejour.reservation_id == reservation_id)).all()
+        for sejour in sejours:
+            if not chambre_libre(session, sejour.chambre_id, sejour.date_debut, sejour.date_fin, sejour.id):
+                raise ChambreOccupee("La chambre est déjà occupée sur cette période")
+        reservation.statut = StatutReservation.confirmee
+        session.add(reservation)
+        _journaliser(session, reservation_id, user_id, "Réservation reprise")
+        session.commit()
+
+
 def ajouter_note(reservation_id: int, user_id: int | None, description: str) -> None:
     with get_session() as session:
         _journaliser(session, reservation_id, user_id, description.strip())
@@ -232,7 +265,7 @@ def ajouter_note(reservation_id: int, user_id: int | None, description: str) -> 
 
 def champs_modifies(avant: dict, apres: dict) -> list[str]:
     """Clés de CHAMPS_FICHE présentes dans apres dont la valeur normalisée diffère de avant."""
-    return [cle for cle in CHAMPS_FICHE if cle in apres and _normaliser(apres[cle]) != avant.get(cle)]
+    return [cle for cle in CHAMPS_FICHE if cle in apres and _comparable(apres[cle]) != _comparable(avant.get(cle))]
 
 
 def enregistrer_fiche(reservation_id: int, user_id: int | None, valeurs: dict) -> list[str]:
@@ -249,7 +282,7 @@ def enregistrer_fiche(reservation_id: int, user_id: int | None, valeurs: dict) -
             return []
         for cle in modifies:
             modele, _ = CHAMPS_FICHE[cle]
-            setattr(cibles[modele], cle, _normaliser(valeurs[cle]))
+            setattr(cibles[modele], cle, _valeur_fiche(cle, valeurs[cle]))
             session.add(cibles[modele])
         libelles = [CHAMPS_FICHE[cle][1] for cle in modifies]
         _journaliser(session, reservation_id, user_id, f"Fiche modifiée : {', '.join(libelles)}")
@@ -292,8 +325,19 @@ def _decrire(session: Session, sejour: Sejour) -> str:
     return f"chambre {chambre.nom} du {sejour.date_debut:%d/%m/%Y} au {sejour.date_fin:%d/%m/%Y}"
 
 
-def _normaliser(valeur: object) -> object:
+def _comparable(valeur: object) -> object:
+    if isinstance(valeur, EtatDossier):
+        return valeur.value
     return valeur if isinstance(valeur, bool) else _vide(valeur)
+
+
+def _valeur_fiche(cle: str, valeur: object) -> object:
+    normalise = _comparable(valeur)
+    if cle == "etat_dossier":
+        if normalise not in {etat.value for etat in EtatDossier}:
+            raise FicheInvalide("État du dossier inconnu")
+        return EtatDossier(str(normalise))
+    return normalise
 
 
 def _vide(valeur: str | None) -> str | None:

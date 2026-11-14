@@ -52,13 +52,10 @@ def enregistrer_sejour(
     adultes: Any = _INCHANGE,
     enfants: Any = _INCHANGE,
     prix_nuit_centimes: Any = _INCHANGE,
-    remise_pct: Any = _INCHANGE,
     ignorer_sejour_id: int | None = None,
 ) -> Sejour:
     if date_fin <= date_debut:
         raise SejourInvalide("Le départ doit être après l'arrivée")
-    if remise_pct is not _INCHANGE and not 0 <= remise_pct <= 100:
-        raise SejourInvalide("La remise doit être comprise entre 0 et 100 %")
     if any(valeur is not _INCHANGE and valeur < 0 for valeur in (adultes, enfants, prix_nuit_centimes)):
         raise SejourInvalide("Les occupants et le prix ne peuvent pas être négatifs")
     if not chambre_libre(session, chambre_id, date_debut, date_fin, ignorer_sejour_id):
@@ -69,7 +66,6 @@ def enregistrer_sejour(
         "adultes": adultes,
         "enfants": enfants,
         "prix_nuit_centimes": prix_nuit_centimes,
-        "remise_pct": remise_pct,
     }
     champs = {
         "reservation_id": reservation_id,

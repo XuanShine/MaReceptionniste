@@ -10,34 +10,27 @@ from ma_receptionniste.models import (
     Client,
     Consommation,
     EtatChambre,
-    EtatDossier,
     Historique,
     ModeReglement,
     Reglement,
     Reservation,
     Sejour,
     StatutReservation,
-    Ticket,
 )
 from ma_receptionniste.sejours import ChambreOccupee, chambre_libre, enregistrer_sejour
 
 # Champs du haut de la fiche séjour, dans l'ordre d'affichage et du journal.
 CHAMPS_FICHE: dict[str, tuple[type[Client] | type[Reservation], str]] = {
     "nom": (Client, "Nom"),
-    "prenom": (Client, "Prénom"),
     "pays": (Client, "Pays de nat."),
     "nom_occupant": (Reservation, "Occupant"),
     "partenaire": (Reservation, "Partenaire"),
-    "etat_dossier": (Reservation, "État du dossier"),
-    "traitee": (Reservation, "Traité"),
+    "statut": (Reservation, "Statut"),
     "type_voiture": (Reservation, "Type voiture"),
     "telephone": (Client, "Téléphone"),
     "email": (Client, "Email"),
     "adresse": (Client, "Adresse"),
     "notes": (Reservation, "Notes"),
-    "notes_internes": (Reservation, "Notes internes"),
-    "notes_tempo": (Reservation, "Notes tempo"),
-    "notes_facturation": (Reservation, "Notes facturation"),
     "facturation": (Reservation, "Facturation client"),
 }
 
@@ -80,7 +73,6 @@ def basculer_etat(chambre_id: int) -> None:
 
 def creer_client(
     nom: str,
-    prenom: str | None = None,
     email: str | None = None,
     telephone: str | None = None,
     adresse: str | None = None,
@@ -90,7 +82,6 @@ def creer_client(
     with get_session() as session:
         client = Client(
             nom=nom.strip(),
-            prenom=_vide(prenom),
             pays=_vide(pays),
             email=_vide(email),
             telephone=_vide(telephone),
@@ -119,7 +110,6 @@ def ajouter_sejour(
     adultes: int = 1,
     enfants: int = 0,
     prix_nuit_centimes: int = 0,
-    remise_pct: int = 0,
     user_id: int | None = None,
 ) -> int:
     with get_session() as session:
@@ -133,7 +123,6 @@ def ajouter_sejour(
             adultes=adultes,
             enfants=enfants,
             prix_nuit_centimes=prix_nuit_centimes,
-            remise_pct=remise_pct,
         )
         _journaliser(session, reservation_id, user_id, f"Séjour ajouté : {_decrire(session, sejour)}")
         session.commit()
@@ -148,7 +137,6 @@ def modifier_sejour(
     adultes: int,
     enfants: int,
     prix_nuit_centimes: int,
-    remise_pct: int,
     nom_client: str | None,
     user_id: int | None = None,
 ) -> None:
@@ -166,7 +154,6 @@ def modifier_sejour(
             adultes=adultes,
             enfants=enfants,
             prix_nuit_centimes=prix_nuit_centimes,
-            remise_pct=remise_pct,
             ignorer_sejour_id=sejour_id,
         )
         _journaliser(session, reservation_id, user_id, f"Séjour modifié : {_decrire(session, sejour)}")
@@ -226,18 +213,6 @@ def annuler_reservation(reservation_id: int, user_id: int | None = None) -> None
         reservation.statut = StatutReservation.annulee
         session.add(reservation)
         _journaliser(session, reservation_id, user_id, "Réservation annulée")
-        session.commit()
-
-
-def ajouter_ticket(reservation_id: int, objet: str, detail: str | None, user_id: int | None) -> None:
-    texte = _vide(objet)
-    if texte is None:
-        raise FicheInvalide("L'objet du ticket est obligatoire")
-    with get_session() as session:
-        if session.get(Reservation, reservation_id) is None:
-            raise FicheInvalide("Réservation introuvable")
-        session.add(Ticket(reservation_id=reservation_id, objet=texte, detail=_vide(detail)))
-        _journaliser(session, reservation_id, user_id, f"Ticket : {texte}")
         session.commit()
 
 
@@ -326,17 +301,17 @@ def _decrire(session: Session, sejour: Sejour) -> str:
 
 
 def _comparable(valeur: object) -> object:
-    if isinstance(valeur, EtatDossier):
+    if isinstance(valeur, StatutReservation):
         return valeur.value
     return valeur if isinstance(valeur, bool) else _vide(valeur)
 
 
 def _valeur_fiche(cle: str, valeur: object) -> object:
     normalise = _comparable(valeur)
-    if cle == "etat_dossier":
-        if normalise not in {etat.value for etat in EtatDossier}:
-            raise FicheInvalide("État du dossier inconnu")
-        return EtatDossier(str(normalise))
+    if cle == "statut":
+        if normalise not in {statut.value for statut in StatutReservation}:
+            raise FicheInvalide("Statut inconnu")
+        return StatutReservation(str(normalise))
     return normalise
 
 

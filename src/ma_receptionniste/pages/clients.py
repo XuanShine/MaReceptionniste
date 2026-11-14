@@ -17,7 +17,6 @@ PAYS_COURANTS = [
 ]
 COLONNES = [
     {"name": "nom", "label": "Nom", "field": "nom", "align": "left", "sortable": True},
-    {"name": "prenom", "label": "Prénom", "field": "prenom", "align": "left", "sortable": True},
     {"name": "pays", "label": "Pays", "field": "pays", "align": "left", "sortable": True},
     {"name": "telephone", "label": "Téléphone", "field": "telephone", "align": "left"},
     {"name": "email", "label": "Email", "field": "email", "align": "left"},
@@ -37,14 +36,13 @@ async def clients() -> None:
         await run.io_bound(
             creer_client,
             nom.value,
-            prenom.value,
             email.value,
             telephone.value,
             adresse.value,
             notes.value,
             pays.value,
         )
-        for champ in (nom, prenom, pays, email, telephone, adresse, notes):
+        for champ in (nom, pays, email, telephone, adresse, notes):
             champ.value = ""
         a_jour = await run.io_bound(lister_clients)
         tableau.update_rows(a_jour)
@@ -61,7 +59,6 @@ async def clients() -> None:
             ui.label("Nouveau client").classes("text-sm font-semibold")
             with ui.grid(columns=4).classes("w-full gap-3"):
                 nom = ui.input("Nom *")
-                prenom = ui.input("Prénom")
                 pays = ui.input("Pays de nationalité", autocomplete=PAYS_COURANTS)
                 telephone = ui.input("Téléphone")
                 email = ui.input("Email")

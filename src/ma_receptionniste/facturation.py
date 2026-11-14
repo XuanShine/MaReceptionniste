@@ -29,9 +29,8 @@ def nuits(debut: date, fin: date) -> int:
     return (fin - debut).days
 
 
-def montant_ligne(prix_nuit_centimes: int, nuits: int, remise_pct: int) -> int:
-    """Arrondi au centime le plus proche, le demi-centime monte."""
-    return (prix_nuit_centimes * nuits * (100 - remise_pct) + 50) // 100
+def montant_ligne(prix_nuit_centimes: int, nuits: int) -> int:
+    return prix_nuit_centimes * nuits
 
 
 def taxe_sejour(adultes: int, nuits: int) -> int:
@@ -40,7 +39,7 @@ def taxe_sejour(adultes: int, nuits: int) -> int:
 
 
 def montant_sejour(sejour: Sejour) -> int:
-    return montant_ligne(sejour.prix_nuit_centimes, nuits(sejour.date_debut, sejour.date_fin), sejour.remise_pct)
+    return montant_ligne(sejour.prix_nuit_centimes, nuits(sejour.date_debut, sejour.date_fin))
 
 
 def taxe_du_sejour(sejour: Sejour) -> int:

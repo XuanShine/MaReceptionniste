@@ -5,15 +5,14 @@ from datetime import date
 import pytest
 from sqlmodel import Session
 
-from ma_receptionniste.consultations import StatutSejour, fiche_sejour, lister_reservations
-from ma_receptionniste.models import ModeReglement, User
+from ma_receptionniste.consultations import fiche_sejour, lister_reservations
+from ma_receptionniste.models import ModeReglement, StatutReservation, User
 from ma_receptionniste.saisie import (
     FacturationImpossible,
     FicheInvalide,
     ajouter_consommation,
     ajouter_reglement,
     ajouter_sejour,
-    ajouter_ticket,
     annuler_reservation,
     creer_chambre,
     creer_client,
@@ -24,11 +23,10 @@ from ma_receptionniste.saisie import (
     reprendre_reservation,
     supprimer_sejour,
 )
-from ma_receptionniste.sejours import ChambreOccupee, SejourInvalide
+from ma_receptionniste.sejours import ChambreOccupee
 
 ARRIVEE = date(2026, 10, 18)
 DEPART = date(2026, 10, 20)
-JOUR = date(2026, 10, 19)
 
 
 @pytest.fixture
@@ -41,11 +39,11 @@ def reception(base) -> int:
 
 
 def nouvelle_reservation() -> int:
-    return creer_reservation(creer_client("LE CLOEREC", "Benedicte"))
+    return creer_reservation(creer_client("LE CLOEREC"))
 
 
 def descriptions(reservation_id: int) -> list[str]:
-    return [note["description"] for note in fiche_sejour(reservation_id, JOUR)["historique"]]
+    return [note["description"] for note in fiche_sejour(reservation_id)["historique"]]
 
 
 def test_enregistrer_fiche_ecrit_et_journalise_les_champs_changes(reception: int) -> None:
@@ -56,33 +54,28 @@ def test_enregistrer_fiche_ecrit_et_journalise_les_champs_changes(reception: int
         reception,
         {
             "nom": "LE CLOEREC",
-            "prenom": "Bénédicte",
             "pays": "France",
             "partenaire": "  Booking.com ",
-            "traitee": False,
             "notes": "arrivé : 19h20",
-            "notes_internes": "",
         },
     )
 
-    assert modifies == ["Prénom", "Pays de nat.", "Partenaire", "Notes"]
-    fiche = fiche_sejour(reservation_id, JOUR)
-    assert fiche["client"]["prenom"] == "Bénédicte"
+    assert modifies == ["Pays de nat.", "Partenaire", "Notes"]
+    fiche = fiche_sejour(reservation_id)
     assert fiche["client"]["pays"] == "France"
     assert fiche["reservation"]["partenaire"] == "Booking.com"
     assert fiche["reservation"]["notes"] == "arrivé : 19h20"
-    assert fiche["reservation"]["notes_internes"] is None
     assert [(note["description"], note["auteur"]) for note in fiche["historique"]] == [
-        ("Fiche modifiée : Prénom, Pays de nat., Partenaire, Notes", "Réception")
+        ("Fiche modifiée : Pays de nat., Partenaire, Notes", "Réception")
     ]
 
 
 def test_enregistrer_fiche_sans_changement_ne_journalise_rien(reception: int) -> None:
     reservation_id = nouvelle_reservation()
-    enregistrer_fiche(reservation_id, reception, {"partenaire": "Expedia", "traitee": True})
+    enregistrer_fiche(reservation_id, reception, {"partenaire": "Expedia"})
 
-    assert enregistrer_fiche(reservation_id, reception, {"partenaire": "Expedia ", "traitee": True}) == []
-    assert descriptions(reservation_id) == ["Fiche modifiée : Partenaire, Traité"]
+    assert enregistrer_fiche(reservation_id, reception, {"partenaire": "Expedia "}) == []
+    assert descriptions(reservation_id) == ["Fiche modifiée : Partenaire"]
 
 
 def test_enregistrer_fiche_refuse_un_nom_vide(base) -> None:
@@ -90,7 +83,7 @@ def test_enregistrer_fiche_refuse_un_nom_vide(base) -> None:
 
     with pytest.raises(FicheInvalide):
         enregistrer_fiche(reservation_id, None, {"nom": "  "})
-    assert fiche_sejour(reservation_id, JOUR)["client"]["nom"] == "LE CLOEREC"
+    assert fiche_sejour(reservation_id)["client"]["nom"] == "LE CLOEREC"
 
 
 def test_facturer_numerote_a_la_suite_une_seule_fois(reception: int) -> None:
@@ -101,7 +94,7 @@ def test_facturer_numerote_a_la_suite_une_seule_fois(reception: int) -> None:
     assert facturer(seconde, reception) == 2
     assert facturer(premiere, reception) == 1
 
-    fiche = fiche_sejour(premiere, JOUR)
+    fiche = fiche_sejour(premiere)
     assert fiche["reservation"]["numero_facture"] == 1
     assert fiche["reservation"]["date_facture"] == date.today()
     assert descriptions(premiere) == ["Facture n° 1 émise"]
@@ -113,7 +106,7 @@ def test_facturer_refuse_une_reservation_annulee(reception: int) -> None:
 
     with pytest.raises(FacturationImpossible):
         facturer(reservation_id, reception)
-    assert fiche_sejour(reservation_id, JOUR)["reservation"]["numero_facture"] is None
+    assert fiche_sejour(reservation_id)["reservation"]["numero_facture"] is None
 
 
 def test_la_fiche_compte_et_totalise_comme_la_capture(reception: int) -> None:
@@ -123,9 +116,9 @@ def test_la_fiche_compte_et_totalise_comme_la_capture(reception: int) -> None:
     ajouter_consommation(reservation_id, "Petit-déjeuner", 1, 1400, reception)
     ajouter_reglement(reservation_id, ModeReglement.ota, 13764, reception)
 
-    fiche = fiche_sejour(reservation_id, JOUR)
+    fiche = fiche_sejour(reservation_id)
 
-    assert fiche["statut_sejour"] == StatutSejour.en_cours
+    assert fiche["statut_sejour"] == StatutReservation.confirmee
     assert (fiche["debut"], fiche["fin"]) == (ARRIVEE, DEPART)
     [ligne] = fiche["lignes"]
     assert (ligne["type_chambre"], ligne["chambre_nom"], ligne["nuits"]) == ("Single BB", "406", 2)
@@ -134,7 +127,6 @@ def test_la_fiche_compte_et_totalise_comme_la_capture(reception: int) -> None:
         "reservations": 1,
         "consommations": 1,
         "reglements": 1,
-        "tickets": 0,
         "modifications": 3,
     }
     assert fiche["totaux"].total == 13764 + 400 + 1400
@@ -144,9 +136,9 @@ def test_la_fiche_compte_et_totalise_comme_la_capture(reception: int) -> None:
         "Consommation ajoutée : 1 × Petit-déjeuner (14,00\u00a0€)",
         "Séjour ajouté : chambre 406 du 18/10/2026 au 20/10/2026",
     ]
-    [ligne_liste] = lister_reservations(JOUR)
+    [ligne_liste] = lister_reservations()
     assert (ligne_liste["chambres"], ligne_liste["nuits"], ligne_liste["total"]) == ("406", 2, 15564)
-    assert ligne_liste["statut"] == StatutSejour.en_cours
+    assert ligne_liste["statut"] == StatutReservation.confirmee
 
 
 def test_modifier_puis_supprimer_une_ligne(reception: int) -> None:
@@ -157,31 +149,22 @@ def test_modifier_puis_supprimer_une_ligne(reception: int) -> None:
     ajouter_sejour(nouvelle_reservation(), autre_id, ARRIVEE, DEPART)
 
     with pytest.raises(ChambreOccupee):
-        modifier_sejour(sejour_id, autre_id, ARRIVEE, DEPART, 1, 0, 6882, 0, None, reception)
+        modifier_sejour(sejour_id, autre_id, ARRIVEE, DEPART, 1, 0, 6882, None, reception)
 
-    modifier_sejour(sejour_id, chambre_id, ARRIVEE, date(2026, 10, 21), 2, 1, 6882, 10, "M. Martin", reception)
-    [ligne] = fiche_sejour(reservation_id, JOUR)["lignes"]
-    assert (ligne["nuits"], ligne["adultes"], ligne["enfants"], ligne["remise_pct"]) == (3, 2, 1, 10)
+    modifier_sejour(sejour_id, chambre_id, ARRIVEE, date(2026, 10, 21), 2, 1, 6882, "M. Martin", reception)
+    [ligne] = fiche_sejour(reservation_id)["lignes"]
+    assert (ligne["nuits"], ligne["adultes"], ligne["enfants"]) == (3, 2, 1)
     assert ligne["nom_client"] == "M. Martin"
-    assert ligne["montant"] == 18581  # 3 × 68,82 € moins 10 % = 185,814 €
+    assert ligne["montant"] == 20646  # 3 × 68,82 €
     assert ligne["taxe"] == 1200  # l'enfant est exonéré
 
     supprimer_sejour(sejour_id, reception)
-    fiche = fiche_sejour(reservation_id, JOUR)
+    fiche = fiche_sejour(reservation_id)
     assert fiche["lignes"] == []
     assert descriptions(reservation_id)[:2] == [
         "Séjour supprimé : chambre 406 du 18/10/2026 au 21/10/2026",
         "Séjour modifié : chambre 406 du 18/10/2026 au 21/10/2026",
     ]
-
-
-def test_remise_hors_bornes_refusee(base) -> None:
-    reservation_id = nouvelle_reservation()
-    chambre_id = creer_chambre("406", 406)
-
-    with pytest.raises(SejourInvalide):
-        ajouter_sejour(reservation_id, chambre_id, ARRIVEE, DEPART, prix_nuit_centimes=6882, remise_pct=120)
-    assert fiche_sejour(reservation_id, JOUR)["lignes"] == []
 
 
 def test_annuler_journalise_une_seule_fois(reception: int) -> None:
@@ -190,35 +173,39 @@ def test_annuler_journalise_une_seule_fois(reception: int) -> None:
     annuler_reservation(reservation_id, reception)
     annuler_reservation(reservation_id, reception)
 
-    fiche = fiche_sejour(reservation_id, JOUR)
-    assert fiche["statut_sejour"] == StatutSejour.annule
+    fiche = fiche_sejour(reservation_id)
+    assert fiche["statut_sejour"] == StatutReservation.annulee
     assert descriptions(reservation_id) == ["Réservation annulée"]
 
 
-def test_l_occupant_et_l_etat_du_dossier_se_relisent(reception: int) -> None:
+def test_le_statut_choisi_se_relit(reception: int) -> None:
     reservation_id = nouvelle_reservation()
 
-    libelles = enregistrer_fiche(
-        reservation_id,
-        reception,
-        {"nom_occupant": "LE CLOEREC Benedicte", "etat_dossier": "option", "notes_facturation": "Agence"},
-    )
+    libelles = enregistrer_fiche(reservation_id, reception, {"statut": "parti"})
 
-    fiche = fiche_sejour(reservation_id, JOUR)
-    assert libelles == ["Occupant", "État du dossier", "Notes facturation"]
-    assert fiche["reservation"]["nom_occupant"] == "LE CLOEREC Benedicte"
-    assert fiche["reservation"]["etat_dossier"] == "option"
-    assert fiche["reservation"]["notes_facturation"] == "Agence"
-    assert lister_reservations(JOUR)[0]["client"] == "LE CLOEREC Benedicte"
+    assert libelles == ["Statut"]
+    assert fiche_sejour(reservation_id)["statut_sejour"] == StatutReservation.parti
+    assert lister_reservations()[0]["statut"] == StatutReservation.parti
 
 
-def test_un_ticket_sans_objet_est_refuse(reception: int) -> None:
+def test_un_statut_inconnu_est_refuse(reception: int) -> None:
     reservation_id = nouvelle_reservation()
 
     with pytest.raises(FicheInvalide):
-        ajouter_ticket(reservation_id, "  ", None, reception)
+        enregistrer_fiche(reservation_id, reception, {"statut": "a_venir"})
 
-    assert fiche_sejour(reservation_id, JOUR)["tickets"] == []
+    assert fiche_sejour(reservation_id)["statut_sejour"] == StatutReservation.confirmee
+
+
+def test_l_occupant_se_relit(reception: int) -> None:
+    reservation_id = nouvelle_reservation()
+
+    libelles = enregistrer_fiche(reservation_id, reception, {"nom_occupant": "LE CLOEREC Benedicte"})
+
+    fiche = fiche_sejour(reservation_id)
+    assert libelles == ["Occupant"]
+    assert fiche["reservation"]["nom_occupant"] == "LE CLOEREC Benedicte"
+    assert lister_reservations()[0]["client"] == "LE CLOEREC Benedicte"
 
 
 def test_reprendre_refuse_une_chambre_deja_reprise(reception: int) -> None:
@@ -232,4 +219,4 @@ def test_reprendre_refuse_une_chambre_deja_reprise(reception: int) -> None:
     with pytest.raises(ChambreOccupee):
         reprendre_reservation(reservation_id, reception)
 
-    assert fiche_sejour(reservation_id, JOUR)["statut_sejour"] == StatutSejour.annule
+    assert fiche_sejour(reservation_id)["statut_sejour"] == StatutReservation.annulee

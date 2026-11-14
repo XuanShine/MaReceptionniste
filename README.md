@@ -63,7 +63,7 @@ src/ma_receptionniste/
   sejours.py                  enregistrer_sejour : seule écriture d'un séjour, contrôle des chevauchements
   facturation.py              nuits, montants, taxe de séjour, totaux, format_euros
   consultations.py            lectures prêtes à afficher : planning, listes, fiche_sejour, statut affiché
-  saisie.py                   écritures journalisées : fiche, occupant, état du dossier, lignes, tickets, facture
+  saisie.py                   écritures journalisées : fiche, occupant, lignes, facture
   pages/                      paquet des pages NiceGUI
     theme.py                  palette, police, props par défaut, formats de date
     layout.py                 page(actif, titre) : menu latéral et barre de titre

@@ -77,17 +77,15 @@ def test_ancienne_base_recoit_les_nouvelles_colonnes() -> None:
         reservation = session.get(Reservation, 1)
         sejour = session.get(Sejour, 1)
 
-        assert (client.nom, client.prenom, client.pays) == ("Dupont", "Alice", None)
+        assert (client.nom, client.pays) == ("Dupont", None)
         assert (chambre.nom, chambre.type_chambre) == ("101", None)
         assert reservation.statut == "confirmee"
-        assert reservation.traitee is False
-        assert str(reservation.etat_dossier) == "en_cours"
         assert reservation.nom_occupant is None
         assert reservation.partenaire is None
         assert reservation.numero_facture is None
         assert (sejour.date_debut, sejour.date_fin) == (date(2026, 10, 10), date(2026, 10, 12))
         assert sejour.nom_client == "Martin"
-        assert (sejour.adultes, sejour.enfants, sejour.prix_nuit_centimes, sejour.remise_pct) == (1, 0, 0, 0)
+        assert (sejour.adultes, sejour.enfants, sejour.prix_nuit_centimes) == (1, 0, 0)
 
         session.add(Consommation(reservation_id=1, libelle="Petit-déjeuner", prix_unitaire_centimes=1400))
         session.add(Reglement(reservation_id=1, mode=ModeReglement.carte, montant_centimes=5000))
@@ -104,8 +102,6 @@ def test_migration_idempotente() -> None:
     seconde = ajouter_colonnes_manquantes(engine)
 
     assert "sejour.adultes" in premiere
-    assert "reservation.traitee" in premiere
-    assert "reservation.etat_dossier" in premiere
     assert seconde == []
 
 

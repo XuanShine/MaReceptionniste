@@ -31,7 +31,7 @@ def session():
 
 def test_planning_compte_les_nuits_et_ignore_les_annulees(session: Session) -> None:
     # Du 10 au 12 : nuits du 10 et du 11. Le 12 est le matin du départ.
-    client = Client(nom="Dupont", prenom="Alice")
+    client = Client(nom="Dupont")
     chambre = Chambre(nom="101", position=1)
     autre = Chambre(nom="102", position=2)
     session.add(client)
@@ -61,7 +61,7 @@ def test_planning_compte_les_nuits_et_ignore_les_annulees(session: Session) -> N
     assert [chambre["nom"] for chambre in data["chambres"]] == ["101", "102"]
     assert len(data["sejours"]) == 1
     sejour = data["sejours"][0]
-    assert sejour["nom"] == "Alice Dupont"
+    assert sejour["nom"] == "Dupont"
     assert sejour["nuits"] == [NUIT_10, NUIT_11]
     assert DEPART_12 not in sejour["nuits"]
     assert nuits_entre(NUIT_10, DEPART_12, NUIT_10, date(2026, 10, 13)) == [NUIT_10, NUIT_11]

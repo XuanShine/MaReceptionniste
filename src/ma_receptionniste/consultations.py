@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
-from enum import StrEnum
 from typing import NamedTuple
 
 from sqlalchemy.orm import selectinload
@@ -12,7 +11,6 @@ from ma_receptionniste.models import (
     Chambre,
     Client,
     EtatChambre,
-    EtatDossier,
     Historique,
     ModeReglement,
     Reservation,
@@ -33,23 +31,17 @@ MODE_REGLEMENT_LABEL = {
 }
 
 
-class StatutSejour(StrEnum):
-    a_venir = "a_venir"
-    en_cours = "en_cours"
-    parti = "parti"
-    annule = "annule"
-
-
 class Affichage(NamedTuple):
     libelle: str
     couleur: str
 
 
 STATUT_SEJOUR = {
-    StatutSejour.a_venir: Affichage("À venir", "secondary"),
-    StatutSejour.en_cours: Affichage("En cours", "primary"),
-    StatutSejour.parti: Affichage("Parti", "ardoise"),
-    StatutSejour.annule: Affichage("Annulée", "negative"),
+    StatutReservation.option_devis: Affichage("Option Devis", "warning"),
+    StatutReservation.confirmee: Affichage("Confirmé", "positive"),
+    StatutReservation.en_cours: Affichage("En cours", "primary"),
+    StatutReservation.parti: Affichage("Parti", "ardoise"),
+    StatutReservation.annulee: Affichage("Annulée", "negative"),
 }
 
 
@@ -59,19 +51,6 @@ class ResumeJour:
     departs: int
     en_maison: int
     chambres_non_pretes: int
-
-
-def statut_sejour(
-    statut_reservation: StatutReservation | str, debut: date | None, fin: date | None, aujourd_hui: date
-) -> StatutSejour:
-    """Le jour d'arrivée compte comme en cours, le matin du départ comme parti."""
-    if statut_reservation == StatutReservation.annulee:
-        return StatutSejour.annule
-    if debut is None or fin is None or aujourd_hui < debut:
-        return StatutSejour.a_venir
-    if aujourd_hui < fin:
-        return StatutSejour.en_cours
-    return StatutSejour.parti
 
 
 def resume_du_jour(sejours: list[dict], chambres: list[dict], jour: date) -> ResumeJour:
@@ -113,12 +92,6 @@ def segments(jours: list[date], sejours: list[dict]) -> list[dict]:
     return resultat
 
 
-def _nom_client(prenom: str | None, nom: str) -> str:
-    if prenom:
-        return f"{prenom} {nom}"
-    return nom
-
-
 def _etat(valeur: EtatChambre | str) -> str:
     return valeur.value if isinstance(valeur, EtatChambre) else str(valeur)
 
@@ -135,7 +108,7 @@ def _chambre_dict(chambre: Chambre) -> dict:
     }
 
 
-def _sejours_visibles(session: Session, debut: date, fin: date, aujourd_hui: date) -> list[dict]:
+def _sejours_visibles(session: Session, debut: date, fin: date) -> list[dict]:
     lignes = session.exec(
         select(Sejour, Reservation, Client)
         .join(Reservation, Reservation.id == Sejour.reservation_id)
@@ -152,9 +125,9 @@ def _sejours_visibles(session: Session, debut: date, fin: date, aujourd_hui: dat
             "reservation_id": sejour.reservation_id,
             "date_debut": sejour.date_debut,
             "date_fin": sejour.date_fin,
-            "nom": reservation.nom_occupant or sejour.nom_client or _nom_client(client.prenom, client.nom),
+            "nom": reservation.nom_occupant or sejour.nom_client or client.nom,
             "partenaire": reservation.partenaire,
-            "statut": statut_sejour(reservation.statut, sejour.date_debut, sejour.date_fin, aujourd_hui),
+            "statut": StatutReservation(str(reservation.statut)),
             "nuits": nuits_entre(sejour.date_debut, sejour.date_fin, debut, fin),
         }
         for sejour, reservation, client in lignes
@@ -167,10 +140,10 @@ def planning(session: Session, debut: date, fin: date, aujourd_hui: date | None 
         _chambre_dict(chambre) for chambre in session.exec(select(Chambre).order_by(Chambre.position, Chambre.nom))
     ]
     # La fenêtre [veille, lendemain) attrape aussi les départs du jour, dont date_fin vaut aujourd'hui.
-    du_jour = _sejours_visibles(session, aujourd_hui - timedelta(days=1), aujourd_hui + timedelta(days=1), aujourd_hui)
+    du_jour = _sejours_visibles(session, aujourd_hui - timedelta(days=1), aujourd_hui + timedelta(days=1))
     return {
         "chambres": chambres,
-        "sejours": _sejours_visibles(session, debut, fin, aujourd_hui),
+        "sejours": _sejours_visibles(session, debut, fin),
         "resume": resume_du_jour(du_jour, chambres, aujourd_hui),
     }
 
@@ -199,7 +172,6 @@ def lister_clients() -> list[dict]:
             {
                 "id": client.id,
                 "nom": client.nom,
-                "prenom": client.prenom,
                 "pays": client.pays,
                 "email": client.email,
                 "telephone": client.telephone,
@@ -213,7 +185,7 @@ def lister_clients() -> list[dict]:
 def options_clients() -> dict[int, str]:
     # ui.select attend identifiant → libellé.
     return {
-        client["id"]: f"{_nom_client(client['prenom'], client['nom'])} #{client['id']}" for client in lister_clients()
+        client["id"]: f"{client['nom']} #{client['id']}" for client in lister_clients()
     }
 
 
@@ -239,41 +211,34 @@ def _bornes(sejours: list[Sejour]) -> tuple[date | None, date | None]:
     return min(sejour.date_debut for sejour in sejours), max(sejour.date_fin for sejour in sejours)
 
 
-def lister_reservations(aujourd_hui: date | None = None) -> list[dict]:
-    aujourd_hui = aujourd_hui or date.today()
+def lister_reservations() -> list[dict]:
     with get_session() as session:
         reservations = session.exec(_avec_tout(select(Reservation)).order_by(Reservation.date_creation.desc())).all()
         resultat = []
         for reservation in reservations:
             sejours = sorted(reservation.sejours, key=lambda sejour: (sejour.date_debut, sejour.id))
             debut, fin = _bornes(sejours)
-            statut = statut_sejour(reservation.statut, debut, fin, aujourd_hui)
             resultat.append(
                 {
                     "id": reservation.id,
-                    "client": reservation.nom_occupant
-                    or _nom_client(reservation.client.prenom, reservation.client.nom),
+                    "client": reservation.nom_occupant or reservation.client.nom,
                     "partenaire": reservation.partenaire,
                     "chambres": ", ".join(sejour.chambre.nom for sejour in sejours),
                     "date_debut": debut,
                     "date_fin": fin,
                     "nuits": nuits(debut, fin) if debut and fin else 0,
-                    "statut": statut,
+                    "statut": StatutReservation(str(reservation.statut)),
                     "total": totaux(sejours, reservation.consommations, reservation.reglements).total,
                 }
             )
         return resultat
 
 
-def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict | None:
-    aujourd_hui = aujourd_hui or date.today()
+def fiche_sejour(reservation_id: int) -> dict | None:
     with get_session() as session:
         reservation = session.exec(
             _avec_tout(select(Reservation))
-            .options(
-                selectinload(Reservation.historiques).selectinload(Historique.user),
-                selectinload(Reservation.tickets),
-            )
+            .options(selectinload(Reservation.historiques).selectinload(Historique.user))
             .where(Reservation.id == reservation_id)
         ).first()
         if reservation is None:
@@ -283,15 +248,13 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
         consommations = sorted(reservation.consommations, key=lambda consommation: consommation.date)
         reglements = sorted(reservation.reglements, key=lambda reglement: reglement.date)
         historique = sorted(reservation.historiques, key=lambda note: (note.date, note.id), reverse=True)
-        tickets = sorted(reservation.tickets, key=lambda ticket: (ticket.date, ticket.id), reverse=True)
         debut, fin = _bornes(sejours)
         return {
             "id": reservation.id,
             "client": {
                 "id": client.id,
                 "nom": client.nom,
-                "prenom": client.prenom,
-                "nom_complet": _nom_client(client.prenom, client.nom),
+                "nom_complet": client.nom,
                 "pays": client.pays,
                 "telephone": client.telephone,
                 "email": client.email,
@@ -300,21 +263,16 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
             "reservation": {
                 "statut": StatutReservation(str(reservation.statut)),
                 "partenaire": reservation.partenaire,
-                "traitee": reservation.traitee,
-                "etat_dossier": EtatDossier(str(reservation.etat_dossier)),
                 "nom_occupant": reservation.nom_occupant,
-                "notes_facturation": reservation.notes_facturation,
                 "type_voiture": reservation.type_voiture,
                 "date_facture": reservation.date_facture,
                 "numero_facture": reservation.numero_facture,
                 "notes": reservation.notes,
-                "notes_internes": reservation.notes_internes,
-                "notes_tempo": reservation.notes_tempo,
                 "facturation": reservation.facturation,
             },
             "debut": debut,
             "fin": fin,
-            "statut_sejour": statut_sejour(reservation.statut, debut, fin, aujourd_hui),
+            "statut_sejour": StatutReservation(str(reservation.statut)),
             "lignes": [
                 {
                     "id": sejour.id,
@@ -325,7 +283,6 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
                     "date_fin": sejour.date_fin,
                     "nuits": nuits(sejour.date_debut, sejour.date_fin),
                     "prix_nuit_centimes": sejour.prix_nuit_centimes,
-                    "remise_pct": sejour.remise_pct,
                     "adultes": sejour.adultes,
                     "enfants": sejour.enfants,
                     "nom_client": sejour.nom_client,
@@ -354,15 +311,6 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
                 }
                 for reglement in reglements
             ],
-            "tickets": [
-                {
-                    "id": ticket.id,
-                    "date": ticket.date,
-                    "objet": ticket.objet,
-                    "detail": ticket.detail,
-                }
-                for ticket in tickets
-            ],
             "historique": [
                 {
                     "id": note.id,
@@ -377,7 +325,6 @@ def fiche_sejour(reservation_id: int, aujourd_hui: date | None = None) -> dict |
                 "consommations": len(consommations),
                 "reglements": len(reglements),
                 "modifications": len(historique),
-                "tickets": len(tickets),
             },
             "totaux": totaux(sejours, consommations, reglements),
         }

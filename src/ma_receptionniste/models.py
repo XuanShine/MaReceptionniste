@@ -1,7 +1,6 @@
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
-from sqlalchemy import text
 from sqlmodel import AutoString, Field, Relationship, SQLModel
 
 # La base applique RESTRICT ou SET NULL. L'ORM ne réécrit pas les liens avant un DELETE.
@@ -14,7 +13,10 @@ class EtatChambre(StrEnum):
 
 
 class StatutReservation(StrEnum):
+    option_devis = "option_devis"
     confirmee = "confirmee"
+    en_cours = "en_cours"
+    parti = "parti"
     annulee = "annulee"
 
 
@@ -24,12 +26,6 @@ class ModeReglement(StrEnum):
     virement = "virement"
     cheque = "cheque"
     ota = "ota"
-
-
-class EtatDossier(StrEnum):
-    en_cours = "en_cours"
-    option = "option"
-    parti = "parti"
 
 
 class User(SQLModel, table=True):
@@ -45,7 +41,6 @@ class User(SQLModel, table=True):
 class Client(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     nom: str = Field(index=True)
-    prenom: str | None = None
     pays: str | None = None
     telephone: str | None = None
     email: str | None = None
@@ -73,12 +68,6 @@ class Reservation(SQLModel, table=True):
     date_creation: datetime = Field(default_factory=lambda: datetime.now(UTC))
     partenaire: str | None = None
     # Une colonne NOT NULL ajoutée après coup a besoin d'un DEFAULT en base pour les lignes existantes.
-    traitee: bool = Field(default=False, sa_column_kwargs={"server_default": "0"})
-    etat_dossier: EtatDossier = Field(
-        default=EtatDossier.en_cours,
-        sa_type=AutoString,
-        sa_column_kwargs={"server_default": text("'en_cours'")},
-    )
     nom_occupant: str | None = None
     type_voiture: str | None = None
     date_facture: date | None = None
@@ -96,7 +85,6 @@ class Reservation(SQLModel, table=True):
     )
     reglements: list["Reglement"] = Relationship(back_populates="reservation", sa_relationship_kwargs=_LA_BASE_DECIDE)
     historiques: list["Historique"] = Relationship(back_populates="reservation", sa_relationship_kwargs=_LA_BASE_DECIDE)
-    tickets: list["Ticket"] = Relationship(back_populates="reservation", sa_relationship_kwargs=_LA_BASE_DECIDE)
 
 
 class Sejour(SQLModel, table=True):
@@ -109,7 +97,6 @@ class Sejour(SQLModel, table=True):
     adultes: int = Field(default=1, sa_column_kwargs={"server_default": "1"})
     enfants: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     prix_nuit_centimes: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
-    remise_pct: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
 
     reservation: Reservation = Relationship(back_populates="sejours")
     chambre: Chambre = Relationship(back_populates="sejours")
@@ -141,16 +128,6 @@ class Reglement(SQLModel, table=True):
     )
 
     reservation: Reservation = Relationship(back_populates="reglements")
-
-
-class Ticket(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    reservation_id: int = Field(foreign_key="reservation.id", index=True)
-    objet: str
-    detail: str | None = None
-    date: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-    reservation: Reservation = Relationship(back_populates="tickets")
 
 
 class Historique(SQLModel, table=True):

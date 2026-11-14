@@ -1,4 +1,4 @@
-"""L'argent d'un séjour : nuits, remise, taxe de séjour, totaux et affichage en euros."""
+"""L'argent d'un séjour : nuits, taxe de séjour, totaux et affichage en euros."""
 
 from datetime import date
 
@@ -21,17 +21,14 @@ def test_nuits_exclut_le_matin_du_depart() -> None:
 
 
 @pytest.mark.parametrize(
-    ("prix", "nuits_", "remise", "attendu"),
+    ("prix", "nuits_", "attendu"),
     [
-        (6882, 2, 0, 13764),  # la ligne de la capture : 2 nuits à 68,82 €
-        (6882, 2, 10, 12388),  # 123,876 € arrondi au centime supérieur
-        (1005, 1, 10, 905),  # 9,045 € : le demi-centime monte
-        (1006, 1, 10, 905),  # 9,054 € : descend
-        (6882, 2, 100, 0),
+        (6882, 2, 13764),  # la ligne de la capture : 2 nuits à 68,82 €
+        (1005, 1, 1005),
     ],
 )
-def test_montant_ligne(prix: int, nuits_: int, remise: int, attendu: int) -> None:
-    assert montant_ligne(prix, nuits_, remise) == attendu
+def test_montant_ligne(prix: int, nuits_: int, attendu: int) -> None:
+    assert montant_ligne(prix, nuits_) == attendu
 
 
 def test_taxe_par_adulte_et_par_nuit() -> None:
@@ -44,7 +41,7 @@ def test_totaux_et_solde() -> None:
     lignes = [
         sejour(prix_nuit_centimes=6882, adultes=1, enfants=0),
         # Les deux enfants ne paient pas la taxe de séjour.
-        sejour(prix_nuit_centimes=10000, remise_pct=10, adultes=2, enfants=2),
+        sejour(prix_nuit_centimes=10000, adultes=2, enfants=2),
     ]
     consommations = [Consommation(reservation_id=1, libelle="Petit-déjeuner", quantite=2, prix_unitaire_centimes=1400)]
     reglements = [
@@ -54,12 +51,12 @@ def test_totaux_et_solde() -> None:
 
     resultat = totaux(lignes, consommations, reglements)
 
-    assert resultat.hebergement == 13764 + 18000
+    assert resultat.hebergement == 13764 + 20000
     assert resultat.taxe_sejour == 400 + 800
     assert resultat.consommations == 2800
-    assert resultat.total == 31764 + 1200 + 2800
+    assert resultat.total == 33764 + 1200 + 2800
     assert resultat.regle == 23764
-    assert resultat.solde == 35764 - 23764
+    assert resultat.solde == 37764 - 23764
 
 
 def test_solde_negatif_quand_le_client_a_trop_paye() -> None:

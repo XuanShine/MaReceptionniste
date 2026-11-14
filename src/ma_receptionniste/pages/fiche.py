@@ -12,7 +12,7 @@ from ma_receptionniste.consultations import (
     options_chambres,
 )
 from ma_receptionniste.facturation import Totaux, centimes, format_euros, montant_ligne, nuits, taxe_sejour
-from ma_receptionniste.models import Client, EtatDossier, ModeReglement, Reservation, StatutReservation
+from ma_receptionniste.models import Client, ModeReglement, Reservation, StatutReservation
 from ma_receptionniste.pages.clients import PAYS_COURANTS
 from ma_receptionniste.pages.layout import ACTIF_DETAIL, badge, etat_vide, fermer_reservation, ouvrir_reservation, page
 from ma_receptionniste.pages.theme import date_courte, date_heure, heure_locale
@@ -24,7 +24,6 @@ from ma_receptionniste.saisie import (
     ajouter_note,
     ajouter_reglement,
     ajouter_sejour,
-    ajouter_ticket,
     annuler_reservation,
     champs_modifies,
     enregistrer_fiche,
@@ -37,20 +36,23 @@ from ma_receptionniste.sejours import ChambreOccupee, SejourInvalide
 
 PARTENAIRES = ["Booking.com", "Expedia", "Airbnb", "Direct", "Téléphone", "Site web", "Agence de voyage"]
 CONSOMMATIONS_COURANTES = ["Petit-déjeuner", "Parking", "Bar", "Mini-bar", "Restaurant", "Blanchisserie"]
-ONGLETS_TEXTE = ("notes", "notes_internes", "notes_tempo", "notes_facturation", "facturation")
+ONGLETS_TEXTE = ("notes", "facturation")
 ONGLETS_COMPTES = {
     "reservations": "Réservations",
     "consommations": "Consommations",
     "reglements": "Règlements",
-    "tickets": "Tickets",
     "modifications": "Modifications",
 }
-OPTIONS_ETAT_DOSSIER = {
-    EtatDossier.en_cours.value: "En cours",
-    EtatDossier.option.value: "Option",
-    EtatDossier.parti.value: "Parti",
+OPTIONS_STATUT = {
+    statut.value: STATUT_SEJOUR[statut].libelle
+    for statut in (
+        StatutReservation.option_devis,
+        StatutReservation.confirmee,
+        StatutReservation.en_cours,
+        StatutReservation.parti,
+    )
 }
-DEFAUTS_LIGNE = {"adultes": 1, "enfants": 0, "prix_nuit_centimes": 0, "remise_pct": 0, "nom_client": None}
+DEFAUTS_LIGNE = {"adultes": 1, "enfants": 0, "prix_nuit_centimes": 0, "nom_client": None}
 
 A_DROITE = "text-right"
 A_GAUCHE = "text-left"
@@ -65,13 +67,12 @@ COLONNES_LIGNES: tuple[tuple[str, Callable[[dict], str], str], ...] = (
     ("Début", lambda ligne: date_courte(ligne["date_debut"]), A_GAUCHE),
     ("Fin", lambda ligne: date_courte(ligne["date_fin"]), A_GAUCHE),
     ("Prix TTC/nuit", lambda ligne: format_euros(ligne["prix_nuit_centimes"]), A_DROITE),
-    ("Remise %", lambda ligne: f"{ligne['remise_pct']} %" if ligne["remise_pct"] else "—", A_DROITE),
     ("Adultes", lambda ligne: str(ligne["adultes"]), A_DROITE),
     ("Enfants", lambda ligne: str(ligne["enfants"]), A_DROITE),
     ("Taxe de séjour", lambda ligne: format_euros(ligne["taxe"]), A_DROITE),
     ("Montant", lambda ligne: format_euros(ligne["montant"]), f"{A_DROITE} font-semibold"),
 )
-GROUPES_LIGNES = ((None, 2), ("Période / Prix", 5), ("Occupation / Taxe", 3), (None, 1))
+GROUPES_LIGNES = ((None, 2), ("Période / Prix", 4), ("Occupation / Taxe", 3), (None, 1))
 COLONNES_CONSOMMATIONS = (
     ("Date", A_GAUCHE),
     ("Libellé", f"{A_GAUCHE} w-full"),
@@ -80,11 +81,6 @@ COLONNES_CONSOMMATIONS = (
     ("Montant", f"{A_DROITE} font-semibold"),
 )
 COLONNES_REGLEMENTS = (("Date", A_GAUCHE), ("Mode", f"{A_GAUCHE} w-full"), ("Montant", f"{A_DROITE} font-semibold"))
-COLONNES_TICKETS = (
-    ("Date", A_GAUCHE),
-    ("Objet", A_GAUCHE),
-    ("Détail", f"{A_GAUCHE} w-full whitespace-pre-line!"),
-)
 COLONNES_HISTORIQUE = (
     ("Date", A_GAUCHE),
     ("Auteur", A_GAUCHE),
@@ -121,7 +117,6 @@ class BrouillonLigne:
     adultes: ui.number
     enfants: ui.number
     prix: ui.number
-    remise: ui.number
     options: dict[int, str]
     types_chambres: dict[int, str | None]
     libelle_type: ui.label
@@ -154,7 +149,7 @@ async def fiche(reservation_id: int) -> None:
     async def recharger() -> None:
         nonlocal donnees
         donnees = await run.io_bound(fiche_sejour, reservation_id)
-        for section in (entete, infos, consommations, reglements, tickets, historique, totaux, actions):
+        for section in (entete, infos, consommations, reglements, historique, totaux, actions):
             section.refresh()
         dessiner_persiste()
         compter()
@@ -220,20 +215,6 @@ async def fiche(reservation_id: int) -> None:
             return
         await recharger()
         ui.notify("Réservation reprise", type="positive")
-
-    async def ouvrir_ticket() -> None:
-        if not (objet_ticket.value or "").strip():
-            ui.notify("L'objet du ticket est obligatoire", type="warning")
-            return
-        try:
-            await run.io_bound(ajouter_ticket, reservation_id, objet_ticket.value, detail_ticket.value, user_id)
-        except FicheInvalide as erreur:
-            ui.notify(str(erreur), type="warning")
-            return
-        objet_ticket.value = ""
-        detail_ticket.value = ""
-        await recharger()
-        ui.notify("Ticket ajouté", type="positive")
 
     async def modifier_ligne(ligne: dict) -> None:
         await ouvrir_ligne(ligne)
@@ -313,14 +294,6 @@ async def fiche(reservation_id: int) -> None:
                 for reglement in donnees["reglements"]
             ],
             "Aucun règlement.",
-        )
-
-    @ui.refreshable
-    def tickets() -> None:
-        _tableau(
-            COLONNES_TICKETS,
-            [[date_heure(ticket["date"]), ticket["objet"], ticket["detail"] or "—"] for ticket in donnees["tickets"]],
-            "Aucun ticket.",
         )
 
     @ui.refreshable
@@ -452,7 +425,6 @@ async def fiche(reservation_id: int) -> None:
                             adultes = int(brouillon.adultes.value or 0)
                             enfants = int(brouillon.enfants.value or 0)
                             prix_nuit = centimes(brouillon.prix.value or 0)
-                            remise = int(brouillon.remise.value or 0)
                             enregistrement_en_cours = True
                             try:
                                 await run.io_bound(
@@ -465,7 +437,6 @@ async def fiche(reservation_id: int) -> None:
                                     adultes,
                                     enfants,
                                     prix_nuit,
-                                    remise,
                                     user_id,
                                 )
                             except ChambreOccupee as erreur:
@@ -473,8 +444,8 @@ async def fiche(reservation_id: int) -> None:
                             except SejourInvalide as erreur:
                                 ui.notify(str(erreur), type="warning")
                             else:
-                                fermer_brouillon()
                                 ui.notify("Ligne ajoutée", type="positive")
+                                fermer_brouillon()
                                 await recharger()
                             finally:
                                 enregistrement_en_cours = False
@@ -499,12 +470,6 @@ async def fiche(reservation_id: int) -> None:
                                 "Montant", _euros(max(donnees["totaux"].solde, 0))
                             ).classes("w-36")
                             ui.button("Enregistrer le règlement", icon="add", on_click=ajouter_un_reglement)
-                    with ui.tab_panel("tickets").classes("p-0"):
-                        with _barre_saisie(haut=True):
-                            objet_ticket = ui.input("Objet").classes("w-64")
-                            detail_ticket = ui.input("Détail").classes("flex-1")
-                            ui.button("Ajouter le ticket", icon="confirmation_number", on_click=ouvrir_ticket)
-                        tickets()
                     with ui.tab_panel("modifications").classes("p-0"):
                         with _barre_saisie(haut=True):
                             note = ui.input("Ajouter une note au journal").classes("flex-1").on("keydown.enter", noter)
@@ -525,7 +490,7 @@ async def fiche(reservation_id: int) -> None:
 def _valeur_affichee(valeur: object) -> object:
     if valeur is None:
         return ""
-    if isinstance(valeur, EtatDossier):
+    if isinstance(valeur, StatutReservation):
         return valeur.value
     return valeur
 
@@ -536,7 +501,7 @@ def _champs(fiche: dict) -> dict:
 
 
 def _entete(fiche: dict, retour: Callable[[], Awaitable[None]]) -> None:
-    statut = STATUT_SEJOUR[fiche["statut_sejour"]]
+    statut = STATUT_SEJOUR[fiche["reservation"]["statut"]]
     details = [f"Réservation n° {fiche['id']}"]
     if fiche["debut"]:
         nombre = nuits(fiche["debut"], fiche["fin"])
@@ -558,12 +523,9 @@ def _entete(fiche: dict, retour: Callable[[], Awaitable[None]]) -> None:
 
 def _infos(fiche: dict, valeurs: dict) -> None:
     client, reservation = fiche["client"], fiche["reservation"]
-    statut = STATUT_SEJOUR[fiche["statut_sejour"]]
     with ui.grid().classes("w-full gap-x-4 gap-y-2 items-center").style("grid-template-columns: 7rem 1fr"):
         _libelle("Nom")
-        with ui.row().classes("w-full gap-2 no-wrap"):
-            ui.input(placeholder="Nom").bind_value(valeurs, "nom").classes("flex-1")
-            ui.input(placeholder="Prénom").bind_value(valeurs, "prenom").classes("flex-1")
+        ui.input(placeholder="Nom").bind_value(valeurs, "nom")
         _libelle(CHAMPS_FICHE["nom_occupant"][1])
         ui.input(placeholder="Nom sur le planning").bind_value(valeurs, "nom_occupant")
         _libelle("Client")
@@ -572,12 +534,11 @@ def _infos(fiche: dict, valeurs: dict) -> None:
         ui.input(autocomplete=PAYS_COURANTS).bind_value(valeurs, "pays")
         _libelle(CHAMPS_FICHE["partenaire"][1])
         ui.input(autocomplete=PARTENAIRES).bind_value(valeurs, "partenaire")
-        _libelle(CHAMPS_FICHE["etat_dossier"][1])
-        ui.select(OPTIONS_ETAT_DOSSIER).bind_value(valeurs, "etat_dossier").classes("w-48")
         _libelle("Statut")
-        with ui.row().classes("h-10 items-center gap-4"):
-            badge(statut.libelle, statut.couleur)
-            ui.checkbox(CHAMPS_FICHE["traitee"][1]).bind_value(valeurs, "traitee").props("dense")
+        if reservation["statut"] == StatutReservation.annulee:
+            badge(STATUT_SEJOUR[StatutReservation.annulee].libelle, "negative")
+        else:
+            ui.select(OPTIONS_STATUT).bind_value(valeurs, "statut").classes("w-48")
         _libelle(CHAMPS_FICHE["type_voiture"][1])
         ui.input().bind_value(valeurs, "type_voiture")
         _libelle("Date facture")
@@ -804,7 +765,7 @@ def _mettre_a_jour_brouillon(ligne: BrouillonLigne) -> None:
     ligne.libelle_nuits.set_text(str(nombre))
     ligne.libelle_taxe.set_text(format_euros(taxe_sejour(int(ligne.adultes.value or 0), nombre)))
     ligne.libelle_montant.set_text(
-        format_euros(montant_ligne(centimes(ligne.prix.value or 0), nombre, int(ligne.remise.value or 0)))
+        format_euros(montant_ligne(centimes(ligne.prix.value or 0), nombre))
     )
 
 
@@ -839,12 +800,6 @@ def _monter_brouillon(
         with _cellule_saisie():
             prix = _champ_euros("", _euros(DEFAUTS_LIGNE["prix_nuit_centimes"])).props(PROPS_SAISIE).classes("w-24")
         with _cellule_saisie():
-            remise = (
-                ui.number(value=DEFAUTS_LIGNE["remise_pct"], min=0, max=100, precision=0, format="%d")
-                .props(f"{PROPS_SAISIE} suffix=%")
-                .classes("w-16")
-            )
-        with _cellule_saisie():
             adultes = (
                 ui.number(value=DEFAUTS_LIGNE["adultes"], min=0, precision=0, format="%d")
                 .props(PROPS_SAISIE)
@@ -866,7 +821,6 @@ def _monter_brouillon(
         adultes=adultes,
         enfants=enfants,
         prix=prix,
-        remise=remise,
         options=options,
         types_chambres=types_chambres,
         libelle_type=libelle_type,
@@ -891,7 +845,6 @@ def _monter_brouillon(
     depart.on_value_change(sur_champs)
     adultes.on_value_change(sur_champs)
     prix.on_value_change(sur_champs)
-    remise.on_value_change(sur_champs)
     return ligne
 
 
@@ -908,7 +861,7 @@ def _dialogue_ligne(
             apercu.set_text("Le départ doit être après l'arrivée.")
             return
         nombre = nuits(debut, fin)
-        montant = montant_ligne(centimes(prix.value or 0), nombre, int(remise.value or 0))
+        montant = montant_ligne(centimes(prix.value or 0), nombre)
         taxe = taxe_sejour(int(adultes.value or 0), nombre)
         apercu.set_text(
             f"{nombre} nuit{'s' if nombre > 1 else ''} · montant {format_euros(montant)}"
@@ -933,7 +886,6 @@ def _dialogue_ligne(
             "adultes": int(adultes.value or 0),
             "enfants": int(enfants.value or 0),
             "prix_nuit_centimes": centimes(prix.value or 0),
-            "remise_pct": int(remise.value or 0),
             "nom_client": nom.value,
             "user_id": user_id,
         }
@@ -969,11 +921,6 @@ def _dialogue_ligne(
             adultes = ui.number("Adultes", min=0, precision=0, format="%d").on_value_change(apercu_a_jour)
             enfants = ui.number("Enfants", min=0, precision=0, format="%d")
             prix = _champ_euros("Prix TTC/nuit").on_value_change(apercu_a_jour)
-            remise = (
-                ui.number("Remise", min=0, max=100, precision=0, format="%d")
-                .props("suffix=%")
-                .on_value_change(apercu_a_jour)
-            )
         nom = ui.input("Nom sur le séjour, si différent du client").classes("w-full")
         apercu = ui.label().classes("text-sm text-ardoise tabular-nums")
         with ui.row().classes("w-full items-center gap-2 pt-1"):
@@ -1000,7 +947,6 @@ def _dialogue_ligne(
         adultes.value = ligne["adultes"]
         enfants.value = ligne["enfants"]
         prix.value = _euros(ligne["prix_nuit_centimes"])
-        remise.value = ligne["remise_pct"]
         nom.value = ligne["nom_client"] or ""
         bouton_supprimer.set_text("Supprimer la ligne")
         apercu_a_jour()

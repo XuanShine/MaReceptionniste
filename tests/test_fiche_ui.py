@@ -16,7 +16,7 @@ def _reservation_de_la_capture() -> int:
             register_user(session, EMAIL, "Réception", MOT_DE_PASSE)
         except EmailDejaUtilise:
             pass
-    reservation_id = creer_reservation(creer_client("LE CLOEREC", "Bénédicte", pays="France"))
+    reservation_id = creer_reservation(creer_client("LE CLOEREC", pays="France"))
     hier = date.today() - timedelta(days=1)
     chambre_id = creer_chambre(f"406-{reservation_id}", 1, "Single BB")
     ajouter_sejour(reservation_id, chambre_id, hier, hier + timedelta(days=2), prix_nuit_centimes=6882)
@@ -33,7 +33,7 @@ async def test_la_fiche_montre_la_ligne_les_actions_et_le_total(user: User) -> N
     await user.should_see("Aujourd'hui", retries=30)
 
     await user.open(f"/reservations/{reservation_id}")
-    await user.should_see("Bénédicte LE CLOEREC")
+    await user.should_see("LE CLOEREC")
     await user.should_see("Réservations (1)")
     await user.should_see("Facturer")
     # 2 nuits à 68,82 € et 2 nuits de taxe à 2,00 € pour un adulte.

@@ -1,13 +1,20 @@
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from nicegui import app, run, ui
 
-from ma_receptionniste.consultations import MODE_REGLEMENT_LABEL, STATUT_SEJOUR, fiche_sejour, options_chambres
+from ma_receptionniste.consultations import (
+    MODE_REGLEMENT_LABEL,
+    STATUT_SEJOUR,
+    fiche_sejour,
+    lister_chambres,
+    options_chambres,
+)
 from ma_receptionniste.facturation import Totaux, centimes, format_euros, montant_ligne, nuits, taxe_sejour
 from ma_receptionniste.models import Client, EtatDossier, ModeReglement, Reservation, StatutReservation
 from ma_receptionniste.pages.clients import PAYS_COURANTS
-from ma_receptionniste.pages.layout import badge, etat_vide, page
+from ma_receptionniste.pages.layout import ACTIF_DETAIL, badge, etat_vide, fermer_reservation, ouvrir_reservation, page
 from ma_receptionniste.pages.theme import date_courte, date_heure, heure_locale
 from ma_receptionniste.saisie import (
     CHAMPS_FICHE,
@@ -87,16 +94,17 @@ OPTIONS_MODES = {mode.value: libelle for mode, libelle in MODE_REGLEMENT_LABEL.i
 
 TH = "px-3 py-1.5 text-xs font-semibold text-ardoise bg-slate-50 border-b border-slate-200 whitespace-nowrap"
 TD = "px-3 h-9 border-b border-slate-100 whitespace-nowrap tabular-nums"
+PROPS_SAISIE = "dense borderless hide-bottom-space"
 
 # ui.keyboard ne sait pas empêcher le navigateur d'ouvrir « Enregistrer la page » sur Ctrl+S.
-# Échap est laissé aux dialogues et menus ouverts, qui se ferment d'eux-mêmes.
+# Échap abandonne la fiche, sauf si un dialogue, un menu ou la ligne en cours est ouvert.
 RACCOURCIS = """
 <script>
 window.addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
     event.preventDefault();
     emitEvent('fiche-confirmer');
-  } else if (event.key === 'Escape' && !document.querySelector('.q-dialog, .q-menu')) {
+  } else if (event.key === 'Escape' && !document.querySelector('.q-dialog, .q-menu, .ligne-ouverte')) {
     emitEvent('fiche-abandon');
   }
 }, true);
@@ -104,10 +112,29 @@ window.addEventListener('keydown', (event) => {
 """
 
 
+@dataclass
+class BrouillonLigne:
+    chambre: ui.select
+    nom: ui.input
+    arrivee: ui.date_input
+    depart: ui.date_input
+    adultes: ui.number
+    enfants: ui.number
+    prix: ui.number
+    remise: ui.number
+    options: dict[int, str]
+    types_chambres: dict[int, str | None]
+    libelle_type: ui.label
+    libelle_nuits: ui.label
+    libelle_taxe: ui.label
+    libelle_montant: ui.label
+
+
 @ui.page("/reservations/{reservation_id}")
 async def fiche(reservation_id: int) -> None:
     donnees = await run.io_bound(fiche_sejour, reservation_id)
     if donnees is None:
+        fermer_reservation()
         with page("/reservations", "Fiche séjour"):
             etat_vide(
                 "search_off",
@@ -116,15 +143,20 @@ async def fiche(reservation_id: int) -> None:
                 "/reservations",
             )
         return
+    ouvrir_reservation(reservation_id)
     user_id = app.storage.user.get("user_id")
     enregistre = _champs(donnees)
     valeurs = {cle: _valeur_affichee(valeur) for cle, valeur in enregistre.items()}
+    brouillon: BrouillonLigne | None = None
+    ajout_en_cours = False
+    enregistrement_en_cours = False
 
     async def recharger() -> None:
         nonlocal donnees
         donnees = await run.io_bound(fiche_sejour, reservation_id)
-        for section in (entete, infos, lignes, consommations, reglements, tickets, historique, totaux, actions):
+        for section in (entete, infos, consommations, reglements, tickets, historique, totaux, actions):
             section.refresh()
+        dessiner_persiste()
         compter()
         montant_reglement.value = _euros(max(donnees["totaux"].solde, 0))
 
@@ -149,9 +181,11 @@ async def fiche(reservation_id: int) -> None:
 
     async def valider() -> None:
         if await enregistrer_haut() is not None:
+            fermer_reservation()
             ui.navigate.to("/")
 
     async def partir() -> None:
+        fermer_reservation()
         ui.navigate.to("/")
 
     async def abandonner() -> None:
@@ -201,12 +235,8 @@ async def fiche(reservation_id: int) -> None:
         await recharger()
         ui.notify("Ticket ajouté", type="positive")
 
-    async def ajouter_ligne() -> None:
-        debut = donnees["debut"] or date.today()
-        await ouvrir_ligne(None, debut, donnees["fin"] or debut + timedelta(days=1))
-
     async def modifier_ligne(ligne: dict) -> None:
-        await ouvrir_ligne(ligne, ligne["date_debut"], ligne["date_fin"])
+        await ouvrir_ligne(ligne)
 
     async def ajouter_une_consommation() -> None:
         if not (libelle.value or "").strip() or prix_unitaire.value is None:
@@ -252,10 +282,6 @@ async def fiche(reservation_id: int) -> None:
     @ui.refreshable
     def infos() -> None:
         _infos(donnees, valeurs)
-
-    @ui.refreshable
-    def lignes() -> None:
-        _tableau_lignes(donnees["lignes"], modifier_ligne, ajouter_ligne)
 
     @ui.refreshable
     def consommations() -> None:
@@ -329,8 +355,8 @@ async def fiche(reservation_id: int) -> None:
     ui.on("fiche-confirmer", confirmer)
     ui.on("fiche-abandon", abandonner)
 
-    with page("/reservations", "Fiche séjour"):
-        ouvrir_ligne = _dialogue_ligne(reservation_id, user_id, recharger)
+    with page(ACTIF_DETAIL, "Fiche séjour"):
+        ouvrir_ligne = _dialogue_ligne(user_id, recharger)
         confirmation_annulation = _confirmation(
             "Annuler la réservation ?",
             "Elle passe au statut « Annulée » et ses chambres sont libérées sur le planning.",
@@ -361,7 +387,100 @@ async def fiche(reservation_id: int) -> None:
                 compter()
                 with ui.tab_panels(onglets, value="reservations", animated=False).classes("w-full"):
                     with ui.tab_panel("reservations").classes("p-0"):
-                        lignes()
+                        corps_persiste, corps_brouillon, pied_lignes = _tableau_lignes()
+
+                        def dessiner_persiste() -> None:
+                            _remplir_persiste(corps_persiste, donnees["lignes"], modifier_ligne, brouillon is None)
+
+                        def dessiner_pied() -> None:
+                            pied_lignes.clear()
+                            with pied_lignes:
+                                if brouillon is None:
+                                    _lien_ajout(ajouter_ligne)
+                                else:
+                                    _boutons_brouillon(enregistrer_brouillon, annuler_brouillon)
+
+                        def fermer_brouillon() -> None:
+                            nonlocal brouillon
+                            brouillon = None
+                            corps_brouillon.clear()
+                            dessiner_pied()
+
+                        def annuler_brouillon() -> None:
+                            fermer_brouillon()
+                            dessiner_persiste()
+
+                        async def ajouter_ligne() -> None:
+                            nonlocal brouillon, ajout_en_cours
+                            if brouillon is not None or ajout_en_cours:
+                                return
+                            ajout_en_cours = True
+                            try:
+                                options, types_chambres = await run.io_bound(_catalogue_chambres)
+                                if brouillon is not None:
+                                    return
+                                if not options:
+                                    ui.notify("Ajoutez d'abord une chambre", type="warning")
+                                    return
+                                debut = donnees["debut"] or date.today()
+                                brouillon = _monter_brouillon(
+                                    corps_brouillon,
+                                    options,
+                                    types_chambres,
+                                    debut,
+                                    donnees["fin"] or debut + timedelta(days=1),
+                                )
+                                dessiner_persiste()
+                                dessiner_pied()
+                            finally:
+                                ajout_en_cours = False
+
+                        async def enregistrer_brouillon() -> None:
+                            nonlocal enregistrement_en_cours
+                            if brouillon is None or enregistrement_en_cours:
+                                return
+                            chambre_id = brouillon.chambre.value
+                            debut = _lire_date(brouillon.arrivee.value)
+                            fin = _lire_date(brouillon.depart.value)
+                            if chambre_id is None or debut is None or fin is None:
+                                ui.notify(
+                                    "Choisissez la chambre et les dates d'arrivée et de départ",
+                                    type="warning",
+                                )
+                                return
+                            nom_client = brouillon.nom.value
+                            adultes = int(brouillon.adultes.value or 0)
+                            enfants = int(brouillon.enfants.value or 0)
+                            prix_nuit = centimes(brouillon.prix.value or 0)
+                            remise = int(brouillon.remise.value or 0)
+                            enregistrement_en_cours = True
+                            try:
+                                await run.io_bound(
+                                    ajouter_sejour,
+                                    reservation_id,
+                                    chambre_id,
+                                    debut,
+                                    fin,
+                                    nom_client,
+                                    adultes,
+                                    enfants,
+                                    prix_nuit,
+                                    remise,
+                                    user_id,
+                                )
+                            except ChambreOccupee as erreur:
+                                ui.notify(str(erreur), type="negative")
+                            except SejourInvalide as erreur:
+                                ui.notify(str(erreur), type="warning")
+                            else:
+                                fermer_brouillon()
+                                ui.notify("Ligne ajoutée", type="positive")
+                                await recharger()
+                            finally:
+                                enregistrement_en_cours = False
+
+                        dessiner_persiste()
+                        dessiner_pied()
                     with ui.tab_panel("consommations").classes("p-0"):
                         consommations()
                         with _barre_saisie():
@@ -370,6 +489,7 @@ async def fiche(reservation_id: int) -> None:
                             prix_unitaire = _champ_euros("PU TTC").classes("w-36")
                             ui.button("Ajouter", icon="add", on_click=ajouter_une_consommation)
                     with ui.tab_panel("reglements").classes("p-0"):
+                        totaux()
                         reglements()
                         with _barre_saisie():
                             mode = ui.select(OPTIONS_MODES, label="Mode", value=ModeReglement.carte.value).classes(
@@ -390,7 +510,6 @@ async def fiche(reservation_id: int) -> None:
                             note = ui.input("Ajouter une note au journal").classes("flex-1").on("keydown.enter", noter)
                             ui.button("Ajouter la note", icon="edit_note", on_click=noter)
                         historique()
-            totaux()
             with ui.row().classes(
                 "w-full items-center gap-2 px-6 py-3 bg-white border-t border-slate-200 rounded-b-lg "
                 "sticky bottom-0 z-10 no-wrap"
@@ -521,11 +640,7 @@ def _rangee_vide(texte: str, largeur: int) -> None:
         ui.label(texte)
 
 
-def _tableau_lignes(
-    lignes: list[dict],
-    modifier: Callable[[dict], Awaitable[None]],
-    ajouter: Callable[[], Awaitable[None]],
-) -> None:
+def _tableau_lignes() -> tuple[ui.element, ui.element, ui.element]:
     with ui.element("table").classes("w-full text-sm border-collapse"):
         with ui.element("thead"):
             haut = ui.element("tr")
@@ -544,24 +659,48 @@ def _tableau_lignes(
             with bas:
                 for libelle, _, classes in colonnes:
                     _th(libelle, classes)
-        with ui.element("tbody"):
-            for ligne in lignes:
-                with (
-                    ui.element("tr")
-                    .classes("cursor-pointer hover:bg-primary-pale")
-                    .on("click", lambda ligne=ligne: modifier(ligne))
-                ):
-                    for _, rendu, classes in COLONNES_LIGNES:
-                        _td(rendu(ligne), classes)
-            if not lignes:
-                _rangee_vide("Aucune ligne de séjour pour l'instant.", len(COLONNES_LIGNES))
-            with ui.element("tr").classes("cursor-pointer hover:bg-primary-pale").on("click", ajouter):
-                with (
-                    ui.element("td").classes(f"{TD} text-primary font-medium").props(f"colspan={len(COLONNES_LIGNES)}")
-                ):
-                    with ui.row().classes("items-center gap-1"):
-                        ui.icon("add", size="1.1rem")
-                        ui.label("Ajouter une nouvelle ligne")
+        persiste = ui.element("tbody")
+        brouillon = ui.element("tbody")
+        pied = ui.element("tbody")
+    return persiste, brouillon, pied
+
+
+def _remplir_persiste(
+    corps: ui.element,
+    lignes: list[dict],
+    modifier: Callable[[dict], Awaitable[None]],
+    montrer_vide: bool,
+) -> None:
+    corps.clear()
+    with corps:
+        for ligne in lignes:
+            with (
+                ui.element("tr")
+                .classes("cursor-pointer hover:bg-primary-pale")
+                .on("click", lambda ligne=ligne: modifier(ligne))
+            ):
+                for _, rendu, classes in COLONNES_LIGNES:
+                    _td(rendu(ligne), classes)
+        if not lignes and montrer_vide:
+            _rangee_vide("Aucune ligne de séjour pour l'instant.", len(COLONNES_LIGNES))
+
+
+def _lien_ajout(ajouter: Callable[[], Awaitable[None]]) -> None:
+    with ui.element("tr").classes("cursor-pointer hover:bg-primary-pale").on("click", ajouter):
+        with ui.element("td").classes(f"{TD} text-primary font-medium").props(f"colspan={len(COLONNES_LIGNES)}"):
+            with ui.row().classes("items-center gap-1"):
+                ui.icon("add", size="1.1rem")
+                ui.label("Ajouter une nouvelle ligne").on("click", ajouter)
+
+
+def _boutons_brouillon(
+    enregistrer: Callable[[], Awaitable[None]], annuler: Callable[[], None]
+) -> None:
+    with ui.element("tr"):
+        with ui.element("td").classes("px-3 py-1 border-b border-slate-100").props(f"colspan={len(COLONNES_LIGNES)}"):
+            with ui.row().classes("items-center gap-2"):
+                ui.button("Enregistrer", on_click=enregistrer)
+                ui.button("Annuler", on_click=annuler).props("flat color=ardoise")
 
 
 def _tableau(colonnes: tuple[tuple[str, str], ...], rangees: list[list[str]], vide: str) -> None:
@@ -586,7 +725,7 @@ def _barre_saisie(haut: bool = False) -> ui.row:
 def _totaux(totaux: Totaux) -> None:
     couleur = "negative" if totaux.solde > 0 else "positive" if totaux.solde == 0 else "warning"
     with ui.row().classes(
-        "w-full justify-end items-center gap-8 px-6 py-3 border-t border-slate-200 bg-slate-50 no-wrap"
+        "w-full justify-end items-center gap-8 px-6 py-3 border-b border-slate-200 bg-slate-50 no-wrap"
     ):
         _montant("Hébergement", totaux.hebergement)
         _montant("Taxe de séjour", totaux.taxe_sejour)
@@ -642,9 +781,123 @@ def _lire_date(texte: str | None) -> date | None:
         return None
 
 
+def _catalogue_chambres() -> tuple[dict[int, str], dict[int, str | None]]:
+    chambres = lister_chambres()
+    return options_chambres(), {chambre["id"]: chambre["type_chambre"] for chambre in chambres}
+
+
+def _ajuster_depart(ligne: BrouillonLigne) -> None:
+    debut, fin = _lire_date(ligne.arrivee.value), _lire_date(ligne.depart.value)
+    if debut and (fin is None or fin <= debut):
+        ligne.depart.value = f"{debut + timedelta(days=1):%d/%m/%Y}"
+
+
+def _mettre_a_jour_brouillon(ligne: BrouillonLigne) -> None:
+    ligne.libelle_type.set_text(ligne.types_chambres.get(ligne.chambre.value) or "—")
+    debut, fin = _lire_date(ligne.arrivee.value), _lire_date(ligne.depart.value)
+    if debut is None or fin is None or fin <= debut:
+        ligne.libelle_nuits.set_text("—")
+        ligne.libelle_taxe.set_text("—")
+        ligne.libelle_montant.set_text("—")
+        return
+    nombre = nuits(debut, fin)
+    ligne.libelle_nuits.set_text(str(nombre))
+    ligne.libelle_taxe.set_text(format_euros(taxe_sejour(int(ligne.adultes.value or 0), nombre)))
+    ligne.libelle_montant.set_text(
+        format_euros(montant_ligne(centimes(ligne.prix.value or 0), nombre, int(ligne.remise.value or 0)))
+    )
+
+
+def _cellule_saisie() -> ui.element:
+    return ui.element("td").classes("px-1 py-0.5 border-b border-slate-100 align-middle")
+
+
+def _etiquette_colonne(classes: str) -> ui.label:
+    with ui.element("td").classes(f"{TD} {classes} align-middle"):
+        return ui.label("—")
+
+
+def _monter_brouillon(
+    corps: ui.element,
+    options: dict[int, str],
+    types_chambres: dict[int, str | None],
+    debut: date,
+    fin: date,
+) -> BrouillonLigne:
+    corps.clear()
+    with corps, ui.element("tr").classes("ligne-ouverte"):
+        libelle_type = _etiquette_colonne(A_GAUCHE)
+        with _cellule_saisie():
+            with ui.row().classes("no-wrap items-center gap-1"):
+                chambre = ui.select(options, with_input=True).props(PROPS_SAISIE).classes("w-40")
+                nom = ui.input(placeholder="Nom").props(PROPS_SAISIE).classes("w-32")
+        libelle_nuits = _etiquette_colonne(A_DROITE)
+        with _cellule_saisie():
+            arrivee = _champ_date("").props(PROPS_SAISIE).classes("w-28")
+        with _cellule_saisie():
+            depart = _champ_date("").props(PROPS_SAISIE).classes("w-28")
+        with _cellule_saisie():
+            prix = _champ_euros("", _euros(DEFAUTS_LIGNE["prix_nuit_centimes"])).props(PROPS_SAISIE).classes("w-24")
+        with _cellule_saisie():
+            remise = (
+                ui.number(value=DEFAUTS_LIGNE["remise_pct"], min=0, max=100, precision=0, format="%d")
+                .props(f"{PROPS_SAISIE} suffix=%")
+                .classes("w-16")
+            )
+        with _cellule_saisie():
+            adultes = (
+                ui.number(value=DEFAUTS_LIGNE["adultes"], min=0, precision=0, format="%d")
+                .props(PROPS_SAISIE)
+                .classes("w-14")
+            )
+        with _cellule_saisie():
+            enfants = (
+                ui.number(value=DEFAUTS_LIGNE["enfants"], min=0, precision=0, format="%d")
+                .props(PROPS_SAISIE)
+                .classes("w-14")
+            )
+        libelle_taxe = _etiquette_colonne(A_DROITE)
+        libelle_montant = _etiquette_colonne(f"{A_DROITE} font-semibold")
+    ligne = BrouillonLigne(
+        chambre=chambre,
+        nom=nom,
+        arrivee=arrivee,
+        depart=depart,
+        adultes=adultes,
+        enfants=enfants,
+        prix=prix,
+        remise=remise,
+        options=options,
+        types_chambres=types_chambres,
+        libelle_type=libelle_type,
+        libelle_nuits=libelle_nuits,
+        libelle_taxe=libelle_taxe,
+        libelle_montant=libelle_montant,
+    )
+
+    def sur_champs() -> None:
+        _mettre_a_jour_brouillon(ligne)
+
+    def sur_arrivee() -> None:
+        _ajuster_depart(ligne)
+        _mettre_a_jour_brouillon(ligne)
+
+    depart.value = f"{fin:%d/%m/%Y}"
+    arrivee.value = f"{debut:%d/%m/%Y}"
+    _ajuster_depart(ligne)
+    _mettre_a_jour_brouillon(ligne)
+    chambre.on_value_change(sur_champs)
+    arrivee.on_value_change(sur_arrivee)
+    depart.on_value_change(sur_champs)
+    adultes.on_value_change(sur_champs)
+    prix.on_value_change(sur_champs)
+    remise.on_value_change(sur_champs)
+    return ligne
+
+
 def _dialogue_ligne(
-    reservation_id: int, user_id: int | None, apres: Callable[[], Awaitable[None]]
-) -> Callable[[dict | None, date, date], Awaitable[None]]:
+    user_id: int | None, apres: Callable[[], Awaitable[None]]
+) -> Callable[[dict], Awaitable[None]]:
     options: dict[int, str] = {}
     sejour_id: int | None = None
     suppression_armee = False
@@ -685,10 +938,7 @@ def _dialogue_ligne(
             "user_id": user_id,
         }
         try:
-            if sejour_id is None:
-                await run.io_bound(ajouter_sejour, reservation_id, **champs)
-            else:
-                await run.io_bound(modifier_sejour, sejour_id, **champs)
+            await run.io_bound(modifier_sejour, sejour_id, **champs)
         except ChambreOccupee as erreur:
             ui.notify(str(erreur), type="negative")
             return
@@ -696,7 +946,7 @@ def _dialogue_ligne(
             ui.notify(str(erreur), type="warning")
             return
         dialogue.close()
-        ui.notify("Ligne modifiée" if sejour_id else "Ligne ajoutée", type="positive")
+        ui.notify("Ligne modifiée", type="positive")
         await apres()
 
     async def supprimer() -> None:
@@ -734,27 +984,25 @@ def _dialogue_ligne(
             ui.button("Annuler", on_click=dialogue.close).props("flat color=ardoise")
             ui.button("Enregistrer", on_click=enregistrer)
 
-    async def ouvrir(ligne: dict | None, debut: date, fin: date) -> None:
+    async def ouvrir(ligne: dict) -> None:
         nonlocal options, sejour_id, suppression_armee
         if not options:
             options = await run.io_bound(options_chambres)
         if not options:
             ui.notify("Ajoutez d'abord une chambre", type="warning")
             return
-        sejour_id = ligne["id"] if ligne else None
+        sejour_id = ligne["id"]
         suppression_armee = False
-        source = ligne or {**DEFAUTS_LIGNE, "date_debut": debut, "date_fin": fin}
-        titre.set_text(f"Ligne de séjour · chambre {ligne['chambre_nom']}" if ligne else "Nouvelle ligne de séjour")
-        chambre.set_options(options, value=ligne["chambre_id"] if ligne else None)
-        arrivee.value = f"{source['date_debut']:%d/%m/%Y}"
-        depart.value = f"{source['date_fin']:%d/%m/%Y}"
-        adultes.value = source["adultes"]
-        enfants.value = source["enfants"]
-        prix.value = _euros(source["prix_nuit_centimes"])
-        remise.value = source["remise_pct"]
-        nom.value = source["nom_client"] or ""
+        titre.set_text(f"Ligne de séjour · chambre {ligne['chambre_nom']}")
+        chambre.set_options(options, value=ligne["chambre_id"])
+        arrivee.value = f"{ligne['date_debut']:%d/%m/%Y}"
+        depart.value = f"{ligne['date_fin']:%d/%m/%Y}"
+        adultes.value = ligne["adultes"]
+        enfants.value = ligne["enfants"]
+        prix.value = _euros(ligne["prix_nuit_centimes"])
+        remise.value = ligne["remise_pct"]
+        nom.value = ligne["nom_client"] or ""
         bouton_supprimer.set_text("Supprimer la ligne")
-        bouton_supprimer.set_visibility(ligne is not None)
         apercu_a_jour()
         dialogue.open()
 

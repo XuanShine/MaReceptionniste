@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 from nicegui import run, ui
 
-from ma_receptionniste.consultations import STATUT_SEJOUR, ResumeJour, charger_planning, segments
+from ma_receptionniste.consultations import STATUT_SEJOUR, charger_planning, segments
 from ma_receptionniste.pages.layout import etat_vide, page
 from ma_receptionniste.pages.theme import JOURS, MOIS, date_courte
 from ma_receptionniste.saisie import basculer_etat
@@ -38,7 +38,6 @@ async def planning() -> None:
     async def contenu() -> None:
         jours = [lundi + timedelta(days=offset) for offset in range(7)]
         data = await run.io_bound(charger_planning, lundi, lundi + timedelta(days=7))
-        _indicateurs(data["resume"])
         with ui.row().classes("w-full items-center gap-2"):
             ui.button(icon="chevron_left", on_click=lambda: aller_a(lundi - timedelta(days=7))).props(
                 "outline dense color=ardoise"
@@ -63,23 +62,6 @@ async def planning() -> None:
 
     with page("/", "Planning"):
         await contenu()
-
-
-def _indicateurs(resume: ResumeJour) -> None:
-    cartes = (
-        ("Arrivées", resume.arrivees, "login", "primary"),
-        ("Départs", resume.departs, "logout", "accent"),
-        ("En maison", resume.en_maison, "hotel", "secondary"),
-        ("Chambres non prêtes", resume.chambres_non_pretes, "cleaning_services", "warning"),
-    )
-    with ui.grid(columns=4).classes("w-full gap-3"):
-        for libelle, valeur, icone, couleur in cartes:
-            with ui.card().props("flat bordered").classes("flex-row items-center gap-3 px-4 py-3 rounded-lg"):
-                with ui.element("div").classes(f"rounded-lg p-2 bg-{couleur}-soft text-{couleur} flex"):
-                    ui.icon(icone, size="1.25rem")
-                with ui.column().classes("gap-0"):
-                    ui.label(str(valeur)).classes("text-2xl font-semibold leading-none tabular-nums")
-                    ui.label(libelle).classes("text-xs text-ardoise mt-1")
 
 
 def _grille(jours: list[date], aujourd_hui: date, data: dict, basculer) -> None:

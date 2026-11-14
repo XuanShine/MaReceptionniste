@@ -15,6 +15,6 @@ def test_tables_gouvernante_absentes_du_metadata_reception() -> None:
     for table in GouvernanteModel.metadata.tables.values():
         assert all(table is not autre for autre in tables_reception)
     assert "role" not in SQLModel.metadata.tables["user"].columns
-    assert "type_chambre" in SQLModel.metadata.tables["chambre"].columns
+    assert "type_chambre_id" in SQLModel.metadata.tables["chambre"].columns
     assert "reservation_id" in SQLModel.metadata.tables["historique"].columns
     assert "liste_id" not in SQLModel.metadata.tables["historique"].columns

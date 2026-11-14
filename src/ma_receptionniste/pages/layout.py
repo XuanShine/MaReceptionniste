@@ -11,6 +11,8 @@ from ma_receptionniste.saisie import creer_reservation
 
 RESERVATION_OUVERTE = "reservation_ouverte"
 ACTIF_DETAIL = "detail"
+CHEMIN_PARAMETRES = "/parametres"
+NOM_ETABLISSEMENT = "Hôtel Panorama"
 
 
 def ouvrir_reservation(reservation_id: int) -> None:
@@ -34,7 +36,7 @@ def _entrees() -> tuple[tuple[str | None, str, str, str], ...]:
             ACTIF_DETAIL,
         ),
         ("/clients", "Clients", "people", "/clients"),
-        ("/chambres", "Chambres", "bed", "/chambres"),
+        (CHEMIN_PARAMETRES, "Paramètres", "settings", CHEMIN_PARAMETRES),
     )
 
 
@@ -79,7 +81,7 @@ def _menu(actif: str) -> None:
         .classes("bg-white p-0 column no-wrap")
     ):
         with ui.column().classes("gap-0 px-5 pt-5 pb-6"):
-            ui.label("Hôtel Panorama").classes("text-lg font-semibold text-primary leading-tight")
+            ui.label(NOM_ETABLISSEMENT).classes("text-lg font-semibold text-primary leading-tight")
             ui.label("Ma Réceptionniste").classes("text-xs text-ardoise tracking-wide")
         with ui.column().classes("w-full gap-1 px-3"):
             for cible, libelle, icone, cle in _entrees():

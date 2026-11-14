@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from nicegui import run, ui
 
 from ma_receptionniste.consultations import STATUT_SEJOUR, charger_planning, segments
-from ma_receptionniste.pages.layout import etat_vide, page
+from ma_receptionniste.pages.layout import CHEMIN_PARAMETRES, etat_vide, page
 from ma_receptionniste.pages.theme import JOURS, MOIS, date_courte
 from ma_receptionniste.saisie import basculer_etat
 
@@ -56,7 +56,7 @@ async def planning() -> None:
                     ui.label(statut.libelle)
         with ui.card().props("flat bordered").classes("w-full p-0 overflow-hidden rounded-lg"):
             if not data["chambres"]:
-                etat_vide("bed", "Aucune chambre n'est encore configurée.", "Ajouter une chambre", "/chambres")
+                etat_vide("bed", "Aucune chambre n'est encore configurée.", "Ajouter une chambre", CHEMIN_PARAMETRES)
                 return
             _grille(jours, aujourd_hui, data, basculer)
 

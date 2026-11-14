@@ -31,6 +31,13 @@ class ColonneNonAjoutable(RuntimeError):
     """Une colonne du modèle manque en base et ne peut pas être ajoutée sans valeur."""
 
 
+class CatalogueIllisible(RuntimeError):
+    """Deux types portent le même libellé. Aucune ligne n'est fusionnée ni supprimée."""
+
+
+_TABLES_CATALOGUE = frozenset({"type_chambre", "occupation_chambre"})
+
+
 def create_db_and_tables(engine: Engine = engine) -> None:
     from ma_receptionniste import models  # noqa: F401
 
@@ -45,7 +52,7 @@ def ajouter_colonnes_manquantes(engine: Engine) -> list[str]:
     tables_en_base = set(inspecteur.get_table_names())
     manquantes: list[Column] = []
     for table in SQLModel.metadata.sorted_tables:
-        if table.name not in tables_en_base:
+        if table.name not in tables_en_base or table.name in _TABLES_CATALOGUE:
             continue
         presentes = {colonne["name"] for colonne in inspecteur.get_columns(table.name)}
         manquantes += [colonne for colonne in table.columns if colonne.name not in presentes]
@@ -56,14 +63,106 @@ def ajouter_colonnes_manquantes(engine: Engine) -> list[str]:
                 "rendez-la nullable ou donnez-lui un server_default"
             )
     ajoutees = [f"{colonne.table.name}.{colonne.name}" for colonne in manquantes]
-    with engine.begin() as connexion:
+
+    def _appliquer(connexion) -> None:
         for colonne in manquantes:
             nom_table = engine.dialect.identifier_preparer.format_table(colonne.table)
-            definition = CreateColumn(colonne).compile(dialect=engine.dialect)
+            definition = _definition_colonne(colonne, engine.dialect)
             connexion.exec_driver_sql(f"ALTER TABLE {nom_table} ADD COLUMN {definition}")
         _reprendre_valeurs_anciennes(connexion, set(ajoutees))
         _retirer_colonnes_remplacees(connexion)
+        _creer_tables_catalogue(connexion)
+        if _table_existe(connexion, "type_chambre") and not _a_colonne(connexion, "type_chambre", "libelle"):
+            connexion.exec_driver_sql("ALTER TABLE type_chambre ADD COLUMN libelle VARCHAR")
+            ajoutees.append("type_chambre.libelle")
+        _remplir_libelle_depuis_name(connexion)
+        _repartir_les_types_de_chambre(connexion)
+        _indexer_libelle(connexion)
+        _indexer_les_liens_chambre(connexion)
+
+    _executer_en_transaction(engine, _appliquer)
     return ajoutees
+
+
+def _executer_en_transaction(engine: Engine, travail) -> None:
+    with engine.connect() as connexion:
+        connexion.exec_driver_sql("BEGIN")
+        try:
+            travail(connexion)
+            connexion.exec_driver_sql("COMMIT")
+        except Exception:
+            connexion.exec_driver_sql("ROLLBACK")
+            raise
+
+
+def _definition_colonne(colonne: Column, dialect) -> str:
+    # CreateColumn sur SQLite omet REFERENCES. Sans elle, un ALTER perd le ON DELETE RESTRICT du modèle.
+    definition = str(CreateColumn(colonne).compile(dialect=dialect))
+    if not colonne.foreign_keys or "REFERENCES" in definition.upper():
+        return definition
+    cle = next(iter(colonne.foreign_keys))
+    action = cle.ondelete or "RESTRICT"
+    return f"{definition} REFERENCES {cle.column.table.name}({cle.column.name}) ON DELETE {action}"
+
+
+def _creer_tables_catalogue(connexion) -> None:
+    from ma_receptionniste.models import OccupationChambre, TypeChambre
+
+    TypeChambre.__table__.create(connexion, checkfirst=True)
+    OccupationChambre.__table__.create(connexion, checkfirst=True)
+
+
+def _remplir_libelle_depuis_name(connexion) -> None:
+    if not (_a_colonne(connexion, "type_chambre", "libelle") and _a_colonne(connexion, "type_chambre", "name")):
+        return
+    connexion.exec_driver_sql(
+        "UPDATE type_chambre SET libelle = trim(name) "
+        "WHERE (libelle IS NULL OR trim(libelle) = '') AND name IS NOT NULL AND trim(name) != ''"
+    )
+
+
+def _repartir_les_types_de_chambre(connexion) -> None:
+    if not (_a_colonne(connexion, "chambre", "type_chambre") and _a_colonne(connexion, "chambre", "type_chambre_id")):
+        return
+    # NOT IN devient inconnu pour toutes les lignes dès qu'un libellé catalogue est NULL.
+    connexion.exec_driver_sql(
+        "INSERT INTO type_chambre (libelle) "
+        "SELECT DISTINCT trim(type_chambre) FROM chambre "
+        "WHERE type_chambre IS NOT NULL AND trim(type_chambre) != '' "
+        "AND NOT EXISTS ("
+        "SELECT 1 FROM type_chambre AS connu WHERE connu.libelle = trim(chambre.type_chambre)"
+        ")"
+    )
+    connexion.exec_driver_sql(
+        "UPDATE chambre SET type_chambre_id = ("
+        "SELECT id FROM type_chambre WHERE libelle = trim(chambre.type_chambre)"
+        ") WHERE type_chambre_id IS NULL AND type_chambre IS NOT NULL AND trim(type_chambre) != ''"
+    )
+    connexion.exec_driver_sql("ALTER TABLE chambre DROP COLUMN type_chambre")
+
+
+def _indexer_libelle(connexion) -> None:
+    if not _a_colonne(connexion, "type_chambre", "libelle"):
+        return
+    doublon = connexion.exec_driver_sql(
+        "SELECT libelle FROM type_chambre WHERE libelle IS NOT NULL GROUP BY libelle HAVING COUNT(*) > 1"
+    ).first()
+    if doublon is not None:
+        raise CatalogueIllisible("Plusieurs types portent le même libellé")
+    connexion.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS uq_type_chambre_libelle ON type_chambre(libelle)")
+
+
+def _indexer_les_liens_chambre(connexion) -> None:
+    for nom in ("type_chambre_id", "occupation_chambre_id"):
+        if _a_colonne(connexion, "chambre", nom):
+            connexion.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS ix_chambre_{nom} ON chambre ({nom})")
+
+
+def _table_existe(connexion, table: str) -> bool:
+    return (
+        connexion.exec_driver_sql("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).first()
+        is not None
+    )
 
 
 def _a_colonne(connexion, table: str, colonne: str) -> bool:

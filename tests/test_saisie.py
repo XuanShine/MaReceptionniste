@@ -5,23 +5,31 @@ from datetime import date
 import pytest
 from sqlmodel import Session
 
-from ma_receptionniste.consultations import fiche_sejour, lister_reservations
+from ma_receptionniste.consultations import ecran_parametres, fiche_sejour, lister_reservations
 from ma_receptionniste.models import ModeReglement, StatutReservation, User
 from ma_receptionniste.saisie import (
+    CatalogueInvalide,
     FacturationImpossible,
     FicheInvalide,
     ajouter_consommation,
     ajouter_reglement,
     ajouter_sejour,
     annuler_reservation,
+    attribuer_type_chambre,
     creer_chambre,
     creer_client,
+    creer_occupation_chambre,
     creer_reservation,
+    creer_type_chambre,
     enregistrer_fiche,
     facturer,
+    modifier_occupation_chambre,
     modifier_sejour,
+    renommer_type_chambre,
     reprendre_reservation,
+    supprimer_occupation_chambre,
     supprimer_sejour,
+    supprimer_type_chambre,
 )
 from ma_receptionniste.sejours import ChambreOccupee
 
@@ -111,7 +119,8 @@ def test_facturer_refuse_une_reservation_annulee(reception: int) -> None:
 
 def test_la_fiche_compte_et_totalise_comme_la_capture(reception: int) -> None:
     reservation_id = nouvelle_reservation()
-    chambre_id = creer_chambre("406", 406, "Single BB")
+    type_id = creer_type_chambre("Single BB")
+    chambre_id = creer_chambre("406", 406, type_chambre_id=type_id)
     ajouter_sejour(reservation_id, chambre_id, ARRIVEE, DEPART, prix_nuit_centimes=6882, user_id=reception)
     ajouter_consommation(reservation_id, "Petit-déjeuner", 1, 1400, reception)
     ajouter_reglement(reservation_id, ModeReglement.ota, 13764, reception)
@@ -220,3 +229,83 @@ def test_reprendre_refuse_une_chambre_deja_reprise(reception: int) -> None:
         reprendre_reservation(reservation_id, reception)
 
     assert fiche_sejour(reservation_id)["statut_sejour"] == StatutReservation.annulee
+
+
+def test_renommer_un_type_change_le_libelle_relu_par_la_fiche(reception: int) -> None:
+    reservation_id = nouvelle_reservation()
+    type_id = creer_type_chambre("Single BB")
+    chambre_id = creer_chambre("406", 406, type_chambre_id=type_id)
+    ajouter_sejour(reservation_id, chambre_id, ARRIVEE, DEPART, user_id=reception)
+
+    assert fiche_sejour(reservation_id)["lignes"][0]["type_chambre"] == "Single BB"
+    assert renommer_type_chambre(type_id, " Suite ") is True
+    assert fiche_sejour(reservation_id)["lignes"][0]["type_chambre"] == "Suite"
+    assert renommer_type_chambre(type_id, "Suite") is False
+    assert fiche_sejour(reservation_id)["lignes"][0]["type_chambre"] == "Suite"
+
+
+def test_une_occupation_modifiee_reste_partagee(base) -> None:
+    occupation_id = creer_occupation_chambre(2, "Twin")
+    creer_chambre("406", 406, occupation_chambre_id=occupation_id)
+    creer_chambre("407", 407, occupation_chambre_id=occupation_id)
+
+    assert modifier_occupation_chambre(occupation_id, 3, " Triple ") is True
+    assert modifier_occupation_chambre(occupation_id, 3, "Triple") is False
+
+    ecran = ecran_parametres()
+    assert ecran["occupations"] == [{"id": occupation_id, "nombre_personnes": 3, "type_lits": "Triple"}]
+    liens = {chambre["nom"]: chambre["occupation_chambre_id"] for chambre in ecran["chambres"]}
+    assert liens == {"406": occupation_id, "407": occupation_id}
+
+
+def test_supprimer_un_catalogue_utilise_est_refuse(base) -> None:
+    type_id = creer_type_chambre("Double")
+    occupation_id = creer_occupation_chambre(2, "Twin")
+    creer_chambre("101", 1, type_chambre_id=type_id, occupation_chambre_id=occupation_id)
+
+    with pytest.raises(CatalogueInvalide, match="Ce type est utilisé par une chambre"):
+        supprimer_type_chambre(type_id)
+    with pytest.raises(CatalogueInvalide, match="Cette occupation est utilisée par une chambre"):
+        supprimer_occupation_chambre(occupation_id)
+
+    ecran = ecran_parametres()
+    assert ecran["types"] == [{"id": type_id, "libelle": "Double"}]
+    assert ecran["chambres"][0]["type_chambre_id"] == type_id
+    assert ecran["chambres"][0]["occupation_chambre_id"] == occupation_id
+
+
+def test_le_catalogue_refuse_le_vide_et_le_doublon(base) -> None:
+    with pytest.raises(CatalogueInvalide, match="Le libellé est obligatoire"):
+        creer_type_chambre("  ")
+    type_id = creer_type_chambre("Double")
+    with pytest.raises(CatalogueInvalide, match="Ce type existe déjà"):
+        creer_type_chambre("Double")
+    autre_id = creer_type_chambre("double")
+    assert autre_id != type_id
+
+    with pytest.raises(CatalogueInvalide, match="Le nombre de personnes doit être au moins 1"):
+        creer_occupation_chambre(0, "Twin")
+    with pytest.raises(CatalogueInvalide, match="Le type de lits est obligatoire"):
+        creer_occupation_chambre(2, "  ")
+    creer_occupation_chambre(2, "Twin")
+    with pytest.raises(CatalogueInvalide, match="Cette occupation existe déjà"):
+        creer_occupation_chambre(2, " Twin ")
+
+
+def test_creer_chambre_prend_les_identifiants_en_mot_cle(base) -> None:
+    type_id = creer_type_chambre("Single BB")
+    occupation_id = creer_occupation_chambre(1, "Single")
+
+    with pytest.raises(TypeError):
+        creer_chambre("406", 406, type_id)
+
+    chambre_id = creer_chambre("406", 406, type_chambre_id=type_id, occupation_chambre_id=occupation_id)
+    chambre = ecran_parametres()["chambres"][0]
+    assert chambre["id"] == chambre_id
+    assert chambre["type_chambre"] == "Single BB"
+    assert chambre["type_chambre_id"] == type_id
+    assert chambre["occupation_chambre_id"] == occupation_id
+    assert attribuer_type_chambre(chambre_id, type_id) is False
+    assert attribuer_type_chambre(chambre_id, None) is True
+    assert ecran_parametres()["chambres"][0]["type_chambre"] is None
+    assert ecran_parametres()["position"] == 407

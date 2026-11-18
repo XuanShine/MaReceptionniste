@@ -1,10 +1,11 @@
-"""Note YAML des consommations ponctuelles : lecture, cases, totaux, incohérences."""
+"""Note YAML des consommations ponctuelles : lecture, cases, totaux, incohérences, journal."""
 
 import copy
 from datetime import date
 from types import SimpleNamespace
 
 import pytest
+from sqlmodel import Session
 
 from ma_receptionniste.consommation_ponctuelle import (
     NoteIllisible,
@@ -16,6 +17,15 @@ from ma_receptionniste.consommation_ponctuelle import (
     totaux,
     tout_cocher,
     tout_retirer,
+)
+from ma_receptionniste.consultations import fiche_sejour
+from ma_receptionniste.db import get_session
+from ma_receptionniste.models import Reservation, User
+from ma_receptionniste.saisie import (
+    OperationPonctuelle,
+    creer_client,
+    creer_reservation,
+    modifier_consommation_ponctuelle,
 )
 
 EXEMPLE = """\
@@ -110,3 +120,80 @@ def test_incoherences_sur_un_changement_de_chambre_et_de_dates() -> None:
         "Bar · Chambre 12 : chambre absente des séjours",
         "Petit-déjeuner · Chambre 12 : chambre absente des séjours",
     ]
+
+
+@pytest.fixture
+def reception(base) -> int:
+    with Session(base) as session:
+        user = User(email="ponctuelle@hotel-panorama.fr", nom="Réception", password_hash="x")
+        session.add(user)
+        session.commit()
+        return user.id
+
+
+def _poser(reservation_id: int, brut: str) -> None:
+    with get_session() as session:
+        reservation = session.get(Reservation, reservation_id)
+        assert reservation is not None
+        reservation.notes_internes = brut
+        session.add(reservation)
+        session.commit()
+
+
+@pytest.mark.parametrize("brut", ["[", "Consommation: [1]\n"])
+def test_une_note_illisible_n_est_jamais_ecrasee(brut: str, reception: int) -> None:
+    reservation_id = creer_reservation(creer_client(f"NOTE {brut!r}"))
+    _poser(reservation_id, brut)
+
+    with pytest.raises(NoteIllisible):
+        modifier_consommation_ponctuelle(
+            reservation_id,
+            OperationPonctuelle("basculer", "12", "Petit-déjeuner", jour=JOUR, nombre=2),
+            reception,
+        )
+
+    with get_session() as session:
+        reservation = session.get(Reservation, reservation_id)
+        assert reservation is not None
+        assert reservation.notes_internes == brut
+    assert fiche_sejour(reservation_id)["historique"] == []
+    assert fiche_sejour(reservation_id)["reservation"]["notes_internes"] == brut
+
+
+def test_l_historique_decrit_chaque_changement(reception: int) -> None:
+    reservation_id = creer_reservation(creer_client("LE CLOEREC"))
+    operation = OperationPonctuelle("basculer", "12", "Petit-déjeuner", jour=JOUR, nombre=2)
+
+    modifier_consommation_ponctuelle(reservation_id, operation, reception)
+    modifier_consommation_ponctuelle(reservation_id, operation, reception)
+    modifier_consommation_ponctuelle(
+        reservation_id,
+        OperationPonctuelle("basculer", "12", "Petit-déjeuner", jour=LENDEMAIN, nombre=2),
+        reception,
+    )
+
+    fiche = fiche_sejour(reservation_id)
+    assert [(note["description"], note["auteur"]) for note in fiche["historique"]] == [
+        ("Petit-déjeuner · Chambre 12 · 12/11 : 2", "Réception"),
+        ("Petit-déjeuner · Chambre 12 · 11/11 : 2", "Réception"),
+    ]
+    assert lire(fiche["reservation"]["notes_internes"]) == lire(EXEMPLE)
+    assert fiche["consommations"] == []
+
+    modifier_consommation_ponctuelle(
+        reservation_id,
+        OperationPonctuelle("tout_cocher", "12", "Petit-déjeuner", jours=(JOUR, LENDEMAIN, SURPLUS), nombre=3),
+        reception,
+    )
+    modifier_consommation_ponctuelle(
+        reservation_id,
+        OperationPonctuelle("tout_retirer", "12", "Petit-déjeuner"),
+        reception,
+    )
+    fiche = fiche_sejour(reservation_id)
+    assert [note["description"] for note in fiche["historique"][:2]] == [
+        "Petit-déjeuner · Chambre 12 · tout retiré",
+        "Petit-déjeuner · Chambre 12 · tout sélectionné : 3",
+    ]
+    assert fiche["reservation"]["notes_internes"] is None
+    assert fiche["consommations"] == []

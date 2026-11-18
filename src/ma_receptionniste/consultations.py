@@ -446,6 +446,7 @@ def fiche_sejour(reservation_id: int) -> dict | None:
                 "date_facture": reservation.date_facture,
                 "numero_facture": reservation.numero_facture,
                 "notes": reservation.notes,
+                "notes_internes": reservation.notes_internes,
                 "facturation": reservation.facturation,
             },
             "debut": debut,

@@ -1,10 +1,13 @@
 import threading
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from ma_receptionniste.consommation_ponctuelle import basculer, ecrire, lire, tout_cocher, tout_retirer
 from ma_receptionniste.consultations import MODE_REGLEMENT_LABEL
 from ma_receptionniste.db import get_session
 from ma_receptionniste.facturation import (
@@ -73,6 +76,18 @@ class CatalogueInvalide(ValueError):
 
 class ProduitInvalide(ValueError):
     """Un produit ou une vente de produit est refusé."""
+
+
+@dataclass(frozen=True)
+class OperationPonctuelle:
+    """Une modification de la note : une case, toutes les dates, ou le retrait du produit."""
+
+    action: Literal["basculer", "tout_cocher", "tout_retirer"]
+    chambre: str
+    produit: str
+    jour: date | None = None
+    jours: tuple[date, ...] = ()
+    nombre: int | None = None
 
 
 
@@ -489,6 +504,51 @@ def supprimer_sejour(sejour_id: int, user_id: int | None = None) -> None:
         _journaliser(session, sejour.reservation_id, user_id, f"Séjour supprimé : {_decrire(session, sejour)}")
         session.delete(sejour)
         session.commit()
+
+
+def modifier_consommation_ponctuelle(
+    reservation_id: int, operation: OperationPonctuelle, user_id: int | None
+) -> None:
+    """Lit, modifie et réécrit la note dans la même transaction que le journal.
+
+    Une note illisible lève ``NoteIllisible`` avant toute écriture.
+    """
+    with get_session() as session:
+        reservation = session.get(Reservation, reservation_id)
+        if reservation is None:
+            raise FicheInvalide("Réservation introuvable")
+        actuelles = lire(reservation.notes_internes)
+        nouvelles = _appliquer_ponctuelle(actuelles, operation)
+        if ecrire(nouvelles) == ecrire(actuelles):
+            return
+        reservation.notes_internes = ecrire(nouvelles) or None
+        session.add(reservation)
+        _journaliser(session, reservation_id, user_id, _decrire_ponctuelle(operation))
+        session.commit()
+
+
+def _appliquer_ponctuelle(donnees: dict, operation: OperationPonctuelle) -> dict:
+    if operation.action == "basculer":
+        if operation.jour is None:
+            raise ValueError("La date est obligatoire")
+        return basculer(donnees, operation.chambre, operation.produit, operation.jour, operation.nombre)
+    if operation.action == "tout_cocher":
+        if operation.nombre is None:
+            raise ValueError("Le nombre est obligatoire")
+        return tout_cocher(donnees, operation.chambre, operation.produit, operation.jours, operation.nombre)
+    if operation.action == "tout_retirer":
+        return tout_retirer(donnees, operation.chambre, operation.produit)
+    raise ValueError("Opération inconnue")
+
+
+def _decrire_ponctuelle(operation: OperationPonctuelle) -> str:
+    lieu = f"Chambre {operation.chambre}"
+    if operation.action == "basculer":
+        valeur = "retiré" if operation.nombre is None else str(operation.nombre)
+        return f"{operation.produit} · {lieu} · {operation.jour:%d/%m} : {valeur}"
+    if operation.action == "tout_cocher":
+        return f"{operation.produit} · {lieu} · tout sélectionné : {operation.nombre}"
+    return f"{operation.produit} · {lieu} · tout retiré"
 
 
 def ajouter_consommation(

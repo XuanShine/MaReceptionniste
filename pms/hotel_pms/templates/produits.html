@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block titre %}Produits{% endblock %}
+{% block contenu %}
+<h1 class="mb-4 text-xl font-semibold">Produits</h1>
+<form method="post" action="/produits" class="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="text-sm">Nom
+    <input name="nom" required maxlength="120" class="mt-1 block rounded-md border border-slate-300 px-2 py-1.5">
+  </label>
+  <label class="text-sm">Prix TTC
+    <input name="prix_ttc" required inputmode="decimal" placeholder="0,00" class="mt-1 block w-28 rounded-md border border-slate-300 px-2 py-1.5">
+  </label>
+  <label class="text-sm">TVA %
+    <input name="taux_tva" value="10" inputmode="decimal" class="mt-1 block w-20 rounded-md border border-slate-300 px-2 py-1.5">
+  </label>
+  <button class="btn btn-primary" type="submit">Ajouter</button>
+</form>
+<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+  <table class="sheet-table">
+    <thead>
+      <tr><th>Nom</th><th class="num">Prix TTC</th><th class="num">TVA %</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for produit in produits %}
+      <tr>
+        <td>{{ produit.nom }}</td>
+        <td class="num">{{ produit.prix_ttc|euro }}</td>
+        <td class="num">{{ produit.taux_tva|pct }}</td>
+        <td class="text-right">
+          <form method="post" action="/produits/{{ produit.id }}/supprimer" onsubmit="return confirm('Supprimer ce produit ?');">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="text-sm text-red-700 hover:underline" type="submit">Supprimer</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-sm text-slate-500">Aucun produit.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

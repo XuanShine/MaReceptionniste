@@ -1,0 +1,56 @@
+<div class="prop">
+  <div class="prop-label">Nom</div>
+  <div class="prop-value">
+    <input form="fiche" name="nom" value="{{ sejour.nom }}" required maxlength="160" autocomplete="off" aria-label="Nom">
+  </div>
+</div>
+<div class="prop">
+  <div class="prop-label">Client</div>
+  <div class="prop-value">
+    <select form="fiche" name="client_id" required aria-label="Client">
+      {% for client in clients %}
+      <option value="{{ client.id }}" {% if client.id == sejour.client_id %}selected{% endif %}>{{ client.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+<div class="prop">
+  <div class="prop-label">Pays de nat.</div>
+  <div class="prop-value">
+    <input form="fiche" name="pays_nat" value="{{ sejour.pays_nat }}" maxlength="80" autocomplete="off" aria-label="Pays de nat.">
+  </div>
+</div>
+<div class="prop">
+  <div class="prop-label">Partenaire</div>
+  <div class="prop-value">
+    <input form="fiche" name="partenaire" value="{{ sejour.partenaire }}" maxlength="80" autocomplete="off" aria-label="Partenaire">
+  </div>
+</div>
+{% include "partials/statut.html" %}
+<div class="prop">
+  <div class="prop-label">Type Voiture</div>
+  <div class="prop-value">
+    <input form="fiche" name="type_voiture" value="{{ sejour.type_voiture }}" maxlength="40" autocomplete="off" aria-label="Type Voiture">
+  </div>
+</div>
+<div class="prop">
+  <div class="prop-label">Date facture</div>
+  <div class="prop-value">
+    <input form="fiche" type="date" name="date_facture" value="{% if sejour.date_facture %}{{ sejour.date_facture.isoformat() }}{% endif %}" aria-label="Date facture">
+  </div>
+</div>
+<div class="prop">
+  <div class="prop-label">Num. facture</div>
+  <div class="prop-value">
+    <input form="fiche" name="num_facture" value="{{ sejour.num_facture or '' }}" maxlength="40" autocomplete="off" aria-label="Num. facture">
+  </div>
+</div>
+<div class="prop">
+  <div class="prop-label"></div>
+  <div class="prop-value justify-end px-3">
+    <label class="inline-flex items-center gap-2 text-sm text-slate-500">
+      <input form="fiche" type="checkbox" name="fact_client_uniquement" value="1" class="accent-slate-700" {% if sejour.fact_client_uniquement %}checked{% endif %}>
+      Fact. Client uniquement
+    </label>
+  </div>
+</div>

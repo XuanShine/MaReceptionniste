@@ -1,0 +1,15 @@
+<form id="statut-form" class="prop" method="post" action="/sejours/{{ sejour.id }}/statut" hx-post="/sejours/{{ sejour.id }}/statut" hx-target="#statut-form" hx-swap="outerHTML">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="prop-label">Statut</div>
+  <div class="prop-value gap-4 px-3 text-sm">
+    <label class="statut-choix">
+      <input type="radio" name="statut" value="en_cours" class="accent-sky-600" {% if sejour.est_en_cours %}checked{% endif %}>
+      En cours
+    </label>
+    <label class="statut-choix">
+      <input type="checkbox" name="traite" value="1" class="accent-sky-600" {% if not sejour.est_en_cours %}checked{% endif %}>
+      Traité
+    </label>
+    <button class="sr-only" type="submit">Mettre à jour le statut</button>
+  </div>
+</form>

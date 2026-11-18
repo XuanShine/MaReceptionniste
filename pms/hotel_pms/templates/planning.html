@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block titre %}Planning{% endblock %}
+{% block contenu %}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+  <h1 class="text-xl font-semibold">Planning</h1>
+  <div class="flex gap-2 text-sm">
+    <a class="rounded-md border border-slate-300 bg-white px-3 py-1.5 hover:bg-slate-50" href="/planning?debut={{ precedent.isoformat() }}">Semaine précédente</a>
+    <a class="rounded-md border border-slate-300 bg-white px-3 py-1.5 hover:bg-slate-50" href="/planning?debut={{ suivant.isoformat() }}">Semaine suivante</a>
+  </div>
+</div>
+<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+  <table class="planning-table">
+    <thead>
+      <tr>
+        <th>Chambre</th>
+        {% for jour in jours %}
+        <th class="{% if jour == aujourdhui %}is-today{% endif %}">{{ jour|date_courte }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for chambre in chambres %}
+      {% set voies = grille[chambre.id] %}
+      {% for voie in voies %}
+      <tr>
+        {% if loop.first %}
+        <th scope="row" class="chambre" rowspan="{{ voies|length }}">
+          <div class="font-medium">{{ chambre.numero }}</div>
+          <div class="text-xs text-slate-500">{{ chambre.type_chambre }}</div>
+        </th>
+        {% endif %}
+        {% for cell in voie %}
+        <td colspan="{{ cell.span }}" class="{% if cell.sejour_id %}is-stay{% elif cell.jour == aujourdhui %}is-today{% elif cell.jour.weekday() >= 5 %}is-weekend{% endif %}">
+          {% if cell.sejour_id %}
+          <a class="planning-bloc{% if cell.en_cours %} is-en-cours{% else %} is-traite{% endif %}" data-span="{{ cell.span }}" data-nuits="{{ cell.nuits }}" href="/sejours/{{ cell.sejour_id }}">
+            <span class="planning-nom">{{ cell.nom }}</span>
+            {% if cell.nuits > 1 %}<span class="planning-nuits">{{ cell.nuits }} nuits</span>{% endif %}
+          </a>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

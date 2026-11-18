@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titre %}Dashboard{% endblock %}
+{% block contenu %}
+<div class="mb-4">
+  <h1 class="text-xl font-semibold">Dashboard</h1>
+  <p class="text-sm capitalize text-slate-500">{{ aujourdhui|date_longue }}</p>
+</div>
+<div class="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
+  <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div class="text-xs uppercase tracking-wide text-slate-500">Séjours en cours</div>
+    <div class="mt-1 text-2xl font-semibold tabular-nums">{{ en_cours|length }}</div>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div class="text-xs uppercase tracking-wide text-slate-500">Arrivées du jour</div>
+    <div class="mt-1 text-2xl font-semibold tabular-nums">{{ arrivees|length }}</div>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div class="text-xs uppercase tracking-wide text-slate-500">Départs du jour</div>
+    <div class="mt-1 text-2xl font-semibold tabular-nums">{{ departs|length }}</div>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div class="text-xs uppercase tracking-wide text-slate-500">Reste à encaisser</div>
+    <div class="mt-1 text-2xl font-semibold tabular-nums">{{ reste_total|euro }}</div>
+    <div class="mt-1 text-xs text-slate-400">{{ nb_chambres }} chambres</div>
+  </div>
+</div>
+<h2 class="mb-2 text-sm font-semibold text-slate-700">Séjours en cours</h2>
+{% with resumes=en_cours %}
+{% include "partials/table_sejours.html" %}
+{% endwith %}
+{% if arrivees %}
+<h2 class="mb-2 mt-6 text-sm font-semibold text-slate-700">Arrivées du jour</h2>
+{% with resumes=arrivees %}
+{% include "partials/table_sejours.html" %}
+{% endwith %}
+{% endif %}
+{% if departs %}
+<h2 class="mb-2 mt-6 text-sm font-semibold text-slate-700">Départs du jour</h2>
+{% with resumes=departs %}
+{% include "partials/table_sejours.html" %}
+{% endwith %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,50 @@
+<section class="flex h-full min-h-80 flex-col rounded-lg border border-slate-200 bg-white shadow-sm">
+  <div class="tabstrip" role="tablist" aria-label="Notes du séjour">
+    {% for cle in BLOCS %}
+    <a data-groupe="bloc" data-role="onglet" data-cle="{{ cle }}" role="tab" aria-selected="{{ 'true' if bloc == cle else 'false' }}" href="/sejours/{{ sejour.id }}?onglet={{ onglet }}&bloc={{ cle }}">
+      {% if cle == 'notes' %}
+      <svg viewBox="0 0 24 24" class="mr-1 inline h-3.5 w-3.5 text-amber-500" fill="currentColor" aria-hidden="true"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm8 1.5V9h4.5L14 4.5zM8 12h8v1.5H8V12zm0 3h8v1.5H8V15z"/></svg>
+      {% endif %}
+      {{ BLOC_LIBELLES[cle] }}
+    </a>
+    {% endfor %}
+  </div>
+  <div id="bloc-contacts" data-groupe="bloc" data-role="panneau" data-cle="contacts" {% if bloc != 'contacts' %}hidden{% endif %}>
+    <div class="prop">
+      <div class="prop-label">Téléphone fixe</div>
+      <div class="prop-value"><input form="fiche" type="tel" name="telephone_fixe" value="{{ sejour.telephone_fixe }}" maxlength="40" autocomplete="off" aria-label="Téléphone fixe"></div>
+    </div>
+    <div class="prop">
+      <div class="prop-label">Téléphone mobile</div>
+      <div class="prop-value"><input form="fiche" type="tel" name="telephone_mobile" value="{{ sejour.telephone_mobile }}" maxlength="40" autocomplete="off" aria-label="Téléphone mobile"></div>
+    </div>
+    <div class="prop">
+      <div class="prop-label">Fax</div>
+      <div class="prop-value"><input form="fiche" type="tel" name="fax" value="{{ sejour.fax }}" maxlength="40" autocomplete="off" aria-label="Fax"></div>
+    </div>
+    <div class="prop">
+      <div class="prop-label">E-mail</div>
+      <div class="prop-value"><input form="fiche" type="email" name="email" value="{{ sejour.email }}" maxlength="160" autocomplete="off" aria-label="E-mail"></div>
+    </div>
+    <div class="prop">
+      <div class="prop-label">Réf. partenaire</div>
+      <div class="prop-value"><input form="fiche" name="ref_partenaire" value="{{ sejour.ref_partenaire }}" maxlength="80" autocomplete="off" aria-label="Réf. partenaire"></div>
+    </div>
+    <div class="prop">
+      <div class="prop-label">Réf. distributeur</div>
+      <div class="prop-value"><input form="fiche" name="ref_distributeur" value="{{ sejour.ref_distributeur }}" maxlength="80" autocomplete="off" aria-label="Réf. distributeur"></div>
+    </div>
+  </div>
+  <div id="bloc-notes" data-groupe="bloc" data-role="panneau" data-cle="notes" {% if bloc != 'notes' %}hidden{% endif %}>
+    <textarea form="fiche" name="notes" class="note-editor" maxlength="4000" aria-label="Notes">{{ sejour.notes }}</textarea>
+  </div>
+  <div id="bloc-notes_internes" data-groupe="bloc" data-role="panneau" data-cle="notes_internes" {% if bloc != 'notes_internes' %}hidden{% endif %}>
+    <textarea form="fiche" name="notes_internes" class="note-editor" maxlength="4000" aria-label="Notes internes">{{ sejour.notes_internes }}</textarea>
+  </div>
+  <div id="bloc-notes_tempo" data-groupe="bloc" data-role="panneau" data-cle="notes_tempo" {% if bloc != 'notes_tempo' %}hidden{% endif %}>
+    <textarea form="fiche" name="notes_tempo" class="note-editor" maxlength="4000" aria-label="Notes tempo">{{ sejour.notes_tempo }}</textarea>
+  </div>
+  <div id="bloc-facturation" data-groupe="bloc" data-role="panneau" data-cle="facturation" {% if bloc != 'facturation' %}hidden{% endif %}>
+    <textarea form="fiche" name="facturation_client" class="note-editor" maxlength="4000" aria-label="Facturation client">{{ sejour.facturation_client }}</textarea>
+  </div>
+</section>

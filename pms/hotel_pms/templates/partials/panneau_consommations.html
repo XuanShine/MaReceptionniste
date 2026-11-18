@@ -1,0 +1,45 @@
+<div id="panneau-consommations" data-groupe="onglet" data-role="panneau" data-cle="consommations" {% if onglet != 'consommations' %}hidden{% endif %}>
+  {% if erreur_conso %}
+  <p class="px-3 py-2 text-sm text-red-700" role="alert">{{ erreur_conso }}</p>
+  {% endif %}
+  {% set vide = {'produit_id': '', 'prix_unitaire': '', 'quantite': '1'} %}
+  <div class="overflow-x-auto">
+    <table class="sheet-table">
+      <thead>
+        <tr>
+          <th>Produit</th>
+          <th class="num">Prix unitaire</th>
+          <th class="num">Quantité</th>
+          <th class="num">Prix total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template id="modele-conso">
+          {% with brouillon=vide %}{% include "partials/ligne_conso.html" %}{% endwith %}
+        </template>
+        {% for ligne in sejour.consommations %}
+        <tr>
+          <td>{{ ligne.nom }}</td>
+          <td class="num">{{ ligne.prix_unitaire|euro }}</td>
+          <td class="num">{{ ligne.quantite }}</td>
+          <td class="num">{{ ligne.prix_total|euro }}</td>
+        </tr>
+        {% endfor %}
+        {% if brouillon_conso %}
+        {% with brouillon=brouillon_conso %}{% include "partials/ligne_conso.html" %}{% endwith %}
+        {% endif %}
+        <tr>
+          <td colspan="4">
+            <button type="button" class="ajout-ligne" data-ajout-ligne>Ajouter une ligne</button>
+          </td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3"></td>
+          <td class="num font-semibold">{{ sejour.total_consommations|euro }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>

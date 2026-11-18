@@ -1,0 +1,19 @@
+<div id="panneau-modifications" data-groupe="onglet" data-role="panneau" data-cle="modifications" {% if onglet != 'modifications' %}hidden{% endif %}>
+  <div class="overflow-x-auto">
+    <table class="sheet-table">
+      <thead>
+        <tr><th>Date</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        {% for modif in sejour.modifications|sort(attribute='date_modif', reverse=True) %}
+        <tr>
+          <td class="whitespace-nowrap">{{ modif.date_modif|dt_fr }}</td>
+          <td>{{ modif.description }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" class="text-sm text-slate-500">Aucune modification.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

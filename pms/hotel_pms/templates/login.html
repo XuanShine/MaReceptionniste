@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion — Panorama</title>
+  <link rel="stylesheet" href="/static/tailwind.css">
+</head>
+<body class="flex min-h-screen items-center justify-center bg-slate-900 px-4">
+  <div class="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
+    <p class="text-xs uppercase tracking-widest text-amber-600">Hôtel</p>
+    <h1 class="text-2xl font-semibold text-slate-900">Panorama</h1>
+    <p class="mb-6 text-sm text-slate-500">Réception — connexion</p>
+    {% if erreur %}
+    <div class="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ erreur }}</div>
+    {% endif %}
+    <form method="post" action="/login" class="space-y-4">
+      <label class="block text-sm font-medium text-slate-700">
+        Identifiant
+        <input name="identifiant" autocomplete="username" required autofocus class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200">
+      </label>
+      <label class="block text-sm font-medium text-slate-700">
+        Mot de passe
+        <input name="password" type="password" autocomplete="current-password" required class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200">
+      </label>
+      <button type="submit" class="btn btn-primary w-full">Entrer</button>
+    </form>
+    <p class="mt-4 text-xs text-slate-400">Démonstration : reception / reception</p>
+  </div>
+</body>
+</html>

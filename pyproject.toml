@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "nicegui>=3.18.0",
     "python-odt-template[jinja]==0.5.1",
+    "pyyaml>=6.0.3",
     "sqlmodel>=0.0.48",
     "wubook",
 ]

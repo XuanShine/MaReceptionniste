@@ -5,6 +5,17 @@ from datetime import date, datetime, timedelta
 
 from nicegui import app, background_tasks, run, ui
 
+from ma_receptionniste.consommation_ponctuelle import (
+    NoteIllisible,
+    cle_chambre,
+    incoherences,
+    jours_du_sejour,
+    lire,
+    nom_chambre,
+)
+from ma_receptionniste.consommation_ponctuelle import (
+    totaux as totaux_note,
+)
 from ma_receptionniste.consultations import (
     MODE_REGLEMENT_LABEL,
     STATUT_SEJOUR,
@@ -27,6 +38,7 @@ from ma_receptionniste.saisie import (
     CHAMPS_FICHE,
     NOM_CLIENT_PASSAGE,
     FicheInvalide,
+    OperationPonctuelle,
     ProduitInvalide,
     ajouter_consommation_produit,
     ajouter_note,
@@ -37,6 +49,7 @@ from ma_receptionniste.saisie import (
     creer_client,
     enregistrer_fiche,
     modifier_consommation,
+    modifier_consommation_ponctuelle,
     modifier_sejour,
     reprendre_reservation,
     supprimer_sejour,
@@ -163,7 +176,13 @@ async def fiche(reservation_id: int) -> None:
     ajout_en_cours = False
     enregistrement_en_cours = False
     vente_en_cours = False
+    ecriture_ponctuelle = False
     produits_vente = await run.io_bound(lister_produits, actifs_seulement=True) or []
+    catalogue_complet = await run.io_bound(lister_produits) or []
+    couples_ajoutes: set[tuple[str, str]] = set()
+    nombres_choisis: dict[tuple[str, str], int] = {}
+    onglet_ponctuel: list[ui.tab] = []
+    champs_ponctuels: dict[str, ui.element] = {}
 
     def passage_selectionne() -> bool:
         return client_nom == NOM_CLIENT_PASSAGE
@@ -197,11 +216,12 @@ async def fiche(reservation_id: int) -> None:
     async def recharger() -> None:
         nonlocal donnees
         donnees = await run.io_bound(fiche_sejour, reservation_id)
-        for section in (entete, infos, consommations, reglements, historique, totaux, actions):
+        for section in (entete, infos, consommations, ponctuelle, reglements, historique, totaux, actions):
             await section.refresh()
         verrouiller_client()
         dessiner_persiste()
         compter()
+        signaler_incoherences()
         montant_reglement.value = _euros(max(donnees["totaux"].solde, 0))
 
     async def enregistrer_haut() -> list[str] | None:
@@ -280,10 +300,27 @@ async def fiche(reservation_id: int) -> None:
         produits_vente = produits
         produit_choisi.set_options({produit.id: produit.nom for produit in produits_vente})
 
-    async def rafraichir_catalogue_consommations(evenement) -> None:
-        if evenement.value != "consommations" or vente_en_cours:
+    async def actualiser_catalogue() -> None:
+        nonlocal catalogue_complet
+        produits = await run.io_bound(lister_produits)
+        if produits is None:
             return
-        await actualiser_produits()
+        catalogue_complet = produits
+        select = champs_ponctuels.get("produit")
+        if select is None or select.is_deleted:
+            return
+        options = _options_produits_ponctuels()
+        if select.options == options:
+            return
+        select.set_options(options, value=select.value if select.value in options else None)
+
+    async def rafraichir_catalogue_consommations(evenement) -> None:
+        if vente_en_cours or ecriture_ponctuelle:
+            return
+        if evenement.value == "consommations":
+            await actualiser_produits()
+        elif evenement.value == "ponctuelle":
+            await actualiser_catalogue()
 
     async def ajouter_une_consommation() -> None:
         nonlocal vente_en_cours
@@ -419,6 +456,215 @@ async def fiche(reservation_id: int) -> None:
         ).set_enabled(not annulee)
         ui.button("Reprendre", icon="event_available", on_click=reprendre).props("outline").set_enabled(annulee)
 
+    def _options_produits_ponctuels() -> dict[int, str]:
+        return {
+            produit.id: produit.nom
+            for produit in catalogue_complet
+            if produit.id is not None and produit.actif and produit.ponctuel
+        }
+
+    def _options_chambres_sejour() -> dict[str, str]:
+        options: dict[str, str] = {}
+        for ligne in donnees["lignes"]:
+            options.setdefault(ligne["chambre_nom"], f"Chambre {ligne['chambre_nom']}")
+        return options
+
+    def _contenu_ponctuel() -> dict:
+        return lire(donnees["reservation"].get("notes_internes"))
+
+    def _notes_paire(contenu: dict, nom: str, produit: str) -> dict[date, int]:
+        produits = (contenu.get("Consommation") or {}).get(cle_chambre(nom)) or {}
+        return dict(produits.get(produit) or {})
+
+    def signaler_incoherences() -> None:
+        if not onglet_ponctuel:
+            return
+        onglet = onglet_ponctuel[0]
+        try:
+            contenu = _contenu_ponctuel()
+        except NoteIllisible:
+            onglet.props.set_optional("alert", None)
+            return
+        alerte = "negative" if incoherences(contenu, donnees["lignes"]) else None
+        onglet.props.set_optional("alert", alerte)
+
+    async def executer_ponctuelle(operation: OperationPonctuelle) -> None:
+        nonlocal ecriture_ponctuelle
+        if ecriture_ponctuelle:
+            return
+        ecriture_ponctuelle = True
+        try:
+            await run.io_bound(modifier_consommation_ponctuelle, reservation_id, operation, user_id)
+        except NoteIllisible:
+            ui.notify("La note interne est illisible. Elle n'a pas été modifiée.", type="negative")
+        try:
+            await recharger()
+        finally:
+            ecriture_ponctuelle = False
+
+    @ui.refreshable
+    def ponctuelle() -> None:
+        champs_ponctuels.clear()
+        note = donnees["reservation"].get("notes_internes")
+        try:
+            contenu = lire(note)
+        except NoteIllisible:
+            _note_illisible(note)
+            return
+        messages = incoherences(contenu, donnees["lignes"])
+        if messages:
+            _alerte_ponctuelle(messages)
+        _formulaire_ponctuel()
+        _paires_ponctuelles(contenu)
+
+    def _formulaire_ponctuel() -> None:
+        options_produits = _options_produits_ponctuels()
+        options_chambres = _options_chambres_sejour()
+
+        async def ajouter() -> None:
+            if ecriture_ponctuelle:
+                return
+            if produit_ponctuel.value not in options_produits:
+                ui.notify("Choisissez un produit", type="warning")
+                return
+            if chambre_ponctuelle.value not in options_chambres:
+                ui.notify("Choisissez une chambre", type="warning")
+                return
+            nombre = _entier_positif(nombre_ponctuel.value)
+            if nombre is None:
+                ui.notify("Indiquez un nombre entier supérieur à 0", type="warning")
+                return
+            paire = (chambre_ponctuelle.value, options_produits[produit_ponctuel.value])
+            couples_ajoutes.add(paire)
+            nombres_choisis[paire] = nombre
+            await ponctuelle.refresh()
+
+        with _barre_saisie():
+            produit_ponctuel = (
+                ui.select(options_produits, label="Produit", with_input=True)
+                .classes("w-64")
+                .mark("produit-ponctuel")
+            )
+            chambre_ponctuelle = (
+                ui.select(options_chambres, label="Chambre", with_input=True)
+                .classes("w-48")
+                .mark("chambre-ponctuelle")
+            )
+            nombre_ponctuel = (
+                ui.number("Nombre", value=1, min=1, precision=0, format="%d").classes("w-28").mark("nombre-ponctuel")
+            )
+            ui.button("Ajouter", icon="add", on_click=ajouter).mark("ajouter-ponctuelle")
+        champs_ponctuels["produit"] = produit_ponctuel
+
+    def _paires_ponctuelles(contenu: dict) -> None:
+        paires = set(couples_ajoutes)
+        for cle, produits in (contenu.get("Consommation") or {}).items():
+            nom = nom_chambre(str(cle))
+            paires.update((nom, str(nom_produit)) for nom_produit in produits)
+        if not paires:
+            ui.label("Aucune consommation ponctuelle pour ce séjour.").classes("px-4 py-6 text-sm text-ardoise")
+            return
+        noms_catalogue = {produit.nom for produit in catalogue_complet}
+        for nom, produit in sorted(paires, key=lambda paire: (paire[0].casefold(), paire[1].casefold())):
+            _paire_ponctuelle(contenu, nom, produit, produit not in noms_catalogue)
+
+    def _paire_ponctuelle(contenu: dict, nom: str, produit: str, gris: bool) -> None:
+        notes = _notes_paire(contenu, nom, produit)
+        cle = (nom, produit)
+        if cle not in nombres_choisis:
+            valeurs = {
+                valeur
+                for valeur in notes.values()
+                if isinstance(valeur, int) and not isinstance(valeur, bool) and valeur > 0
+            }
+            nombres_choisis[cle] = valeurs.pop() if len(valeurs) == 1 else 1
+        jours = set(notes)
+        for ligne in donnees["lignes"]:
+            if ligne["chambre_nom"] == nom:
+                jours.update(jours_du_sejour(ligne))
+        total = totaux_note(contenu).get((cle_chambre(nom), produit), 0)
+
+        def memoriser_nombre(evenement, cle: tuple[str, str] = cle) -> None:
+            nombre = _entier_positif(evenement.value)
+            if nombre is not None:
+                nombres_choisis[cle] = nombre
+
+        async def changer_case(evenement, jour: date, nom: str = nom, produit: str = produit) -> None:
+            if ecriture_ponctuelle:
+                return
+            try:
+                actuelles = _notes_paire(_contenu_ponctuel(), nom, produit)
+            except NoteIllisible:
+                ui.notify("La note interne est illisible. Elle n'a pas été modifiée.", type="negative")
+                await recharger()
+                return
+            coche = bool(evenement.value)
+            nombre_voulu = nombres_choisis.get((nom, produit))
+            if coche == (jour in actuelles) and (not coche or actuelles.get(jour) == nombre_voulu):
+                return
+            nombre = None
+            if coche:
+                nombre = _entier_positif(nombre_voulu)
+                if nombre is None:
+                    ui.notify("Indiquez un nombre entier supérieur à 0", type="warning")
+                    await ponctuelle.refresh()
+                    return
+            await executer_ponctuelle(OperationPonctuelle("basculer", nom, produit, jour=jour, nombre=nombre))
+
+        async def selectionner(nom: str = nom, produit: str = produit) -> None:
+            nombre = _entier_positif(nombres_choisis.get((nom, produit)))
+            if nombre is None:
+                ui.notify("Indiquez un nombre entier supérieur à 0", type="warning")
+                return
+            jours_sejour = tuple(
+                sorted(
+                    {
+                        jour
+                        for ligne in donnees["lignes"]
+                        if ligne["chambre_nom"] == nom
+                        for jour in jours_du_sejour(ligne)
+                    }
+                )
+            )
+            if not jours_sejour:
+                ui.notify("Cette chambre n'a pas de dates de séjour", type="warning")
+                return
+            await executer_ponctuelle(
+                OperationPonctuelle("tout_cocher", nom, produit, jours=jours_sejour, nombre=nombre)
+            )
+
+        async def retirer(nom: str = nom, produit: str = produit) -> None:
+            couples_ajoutes.discard((nom, produit))
+            await executer_ponctuelle(OperationPonctuelle("tout_retirer", nom, produit))
+
+        with ui.column().classes("w-full gap-2 px-4 py-3 border-b border-slate-100"):
+            with ui.row().classes("w-full items-center justify-between gap-3 no-wrap"):
+                with ui.row().classes("items-center gap-2"):
+                    titre = ui.label(f"{produit} · Chambre {nom}").classes(
+                        "text-sm font-medium text-slate-400" if gris else "text-sm font-medium"
+                    )
+                    if gris:
+                        titre.mark(f"gris-ponctuel|{produit}")
+                        ui.label("Hors catalogue").classes("text-xs text-slate-400")
+                ui.label(f"Total : {total}").classes("text-sm tabular-nums").mark(f"total-ponctuel|{nom}|{produit}")
+            with ui.row().classes("w-full items-center gap-2"):
+                (
+                    ui.number("Nombre", value=nombres_choisis[cle], min=1, precision=0, format="%d")
+                    .classes("w-28")
+                    .on_value_change(memoriser_nombre)
+                )
+                ui.button("Tout sélectionner", on_click=selectionner).props("outline dense").mark(
+                    f"tout-ponctuel|{nom}|{produit}"
+                )
+                ui.button("Tout retirer", on_click=retirer).props("outline dense color=ardoise").mark(
+                    f"retirer-ponctuel|{nom}|{produit}"
+                )
+            with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1"):
+                for jour in sorted(jours):
+                    case = ui.checkbox(date_courte(jour), value=jour in notes).props("dense")
+                    case.on_value_change(lambda evenement, jour=jour: changer_case(evenement, jour))
+                    case.mark(f"case-ponctuelle|{nom}|{produit}|{jour.isoformat()}")
+
     def compter() -> None:
         for cle, onglet in onglets_comptes.items():
             onglet.props["label"] = f"{ONGLETS_COMPTES[cle]} ({donnees['compteurs'][cle]})"
@@ -458,8 +704,15 @@ async def fiche(reservation_id: int) -> None:
                     .classes("w-full px-3 text-ardoise border-b border-slate-200")
                     .mark("onglets-fiche") as onglets
                 ):
-                    onglets_comptes = {cle: ui.tab(cle) for cle in ONGLETS_COMPTES}
+                    onglets_comptes = {}
+                    for cle in ONGLETS_COMPTES:
+                        onglets_comptes[cle] = ui.tab(cle)
+                        if cle == "consommations":
+                            onglet_ponctuel.append(
+                                ui.tab("ponctuelle", "Consommation ponctuelle").mark("onglet-ponctuelle")
+                            )
                 compter()
+                signaler_incoherences()
                 with ui.tab_panels(onglets, value="reservations", animated=False).classes("w-full"):
                     with ui.tab_panel("reservations").classes("p-0"):
                         corps_persiste, corps_brouillon, pied_lignes = _tableau_lignes()
@@ -577,6 +830,8 @@ async def fiche(reservation_id: int) -> None:
                                 "Ajouter", icon="add", on_click=ajouter_une_consommation
                             ).mark("ajouter-consommation")
                         onglets.on_value_change(rafraichir_catalogue_consommations)
+                    with ui.tab_panel("ponctuelle").classes("p-0"):
+                        ponctuelle()
                     with ui.tab_panel("reglements").classes("p-0"):
                         totaux()
                         reglements()
@@ -790,6 +1045,27 @@ def _tableau_lignes() -> tuple[ui.element, ui.element, ui.element]:
     return persiste, brouillon, pied
 
 
+def _alerte_ponctuelle(messages: list[str]) -> None:
+    with (
+        ui.row()
+        .classes("w-full items-start gap-3 px-4 py-3 bg-warning-soft text-warning")
+        .mark("alerte-ponctuelle")
+    ):
+        ui.icon("error", size="1.25rem").classes("mt-0.5")
+        with ui.column().classes("gap-1"):
+            ui.label("Cette note ne correspond plus aux séjours.").classes("text-sm font-medium")
+            for message in messages:
+                ui.label(message).classes("text-sm")
+
+
+def _note_illisible(note: str | None) -> None:
+    with ui.column().classes("w-full gap-2 px-4 py-4").mark("note-illisible"):
+        ui.label("La note interne est illisible. Aucune modification ne sera enregistrée.").classes(
+            "text-sm text-negative"
+        )
+        ui.textarea(value=note or "").props("readonly").classes("w-full")
+
+
 def _remplir_persiste(
     corps: ui.element,
     lignes: list[dict],
@@ -803,6 +1079,7 @@ def _remplir_persiste(
                 ui.element("tr")
                 .classes("cursor-pointer hover:bg-primary-pale")
                 .on("click", lambda ligne=ligne: modifier(ligne))
+                .mark(f"ligne-sejour-{ligne['id']}")
             ):
                 for _, rendu, classes in COLONNES_LIGNES:
                     _td(rendu(ligne), classes)
@@ -1285,7 +1562,7 @@ def _dialogue_ligne(
         chambre = ui.select({}, label="Chambre", with_input=True).classes("w-full")
         with ui.grid(columns=2).classes("w-full gap-3"):
             arrivee = _champ_date("Arrivée").on_value_change(arrivee_changee)
-            depart = _champ_date("Départ").on_value_change(apercu_a_jour)
+            depart = _champ_date("Départ").on_value_change(apercu_a_jour).mark("depart-ligne")
             adultes = ui.number("Adultes", min=0, precision=0, format="%d").on_value_change(apercu_a_jour)
             enfants = ui.number("Enfants", min=0, precision=0, format="%d")
             prix = _champ_euros("Prix TTC/nuit").on_value_change(apercu_a_jour)
@@ -1297,7 +1574,7 @@ def _dialogue_ligne(
             )
             ui.space()
             ui.button("Annuler", on_click=dialogue.close).props("flat color=ardoise")
-            ui.button("Enregistrer", on_click=enregistrer)
+            ui.button("Enregistrer", on_click=enregistrer).mark("enregistrer-ligne")
 
     async def ouvrir(ligne: dict) -> None:
         nonlocal options, sejour_id, suppression_armee

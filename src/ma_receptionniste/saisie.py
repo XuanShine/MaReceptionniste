@@ -1,19 +1,32 @@
-from datetime import UTC, date, datetime
+import threading
+from datetime import UTC, date, datetime, timedelta
+from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, func, select, update
+from sqlmodel import Session, select
 
 from ma_receptionniste.consultations import MODE_REGLEMENT_LABEL
 from ma_receptionniste.db import get_session
-from ma_receptionniste.facturation import format_euros
+from ma_receptionniste.facturation import (
+    TAUX_TVA_DEFAUT,
+    TAUX_TVA_POUR_MILLE,
+    EmissionImpossible,
+    destinataire_de_sejour,
+    emettre_facture,
+    format_euros,
+    obtenir_facture_courante,
+    preparer_apercu,
+)
 from ma_receptionniste.models import (
     Chambre,
+    ChambreVirtuelle,
     Client,
     Consommation,
     EtatChambre,
     Historique,
     ModeReglement,
     OccupationChambre,
+    Produit,
     Reglement,
     Reservation,
     Sejour,
@@ -21,6 +34,12 @@ from ma_receptionniste.models import (
     TypeChambre,
 )
 from ma_receptionniste.sejours import ChambreOccupee, chambre_libre, enregistrer_sejour
+
+# Réservations sans personne identifiée : un seul client partagé, jamais une fiche individuelle.
+NOM_CLIENT_PASSAGE = "CLIENT PASSAGE"
+CHAMPS_CLIENT = ("nom", "pays", "telephone", "email", "adresse", "notes_client")
+# Deux fiches ouvertes en même temps ne doivent pas créer deux clients de passage.
+_VERROU_CLIENT_PASSAGE = threading.Lock()
 
 # Champs du haut de la fiche séjour, dans l'ordre d'affichage et du journal.
 CHAMPS_FICHE: dict[str, tuple[type[Client] | type[Reservation], str]] = {
@@ -34,8 +53,10 @@ CHAMPS_FICHE: dict[str, tuple[type[Client] | type[Reservation], str]] = {
     "email": (Client, "Email"),
     "adresse": (Client, "Adresse"),
     "notes": (Reservation, "Notes"),
+    "notes_client": (Client, "Notes Client"),
     "facturation": (Reservation, "Facturation client"),
 }
+ATTRIBUTS_FICHE = {"notes_client": "notes"}
 
 
 class FicheInvalide(ValueError):
@@ -50,15 +71,80 @@ class CatalogueInvalide(ValueError):
     """Un libellé, une occupation ou un lien de chambre est refusé."""
 
 
-def creer_type_chambre(libelle: str) -> int:
+class ProduitInvalide(ValueError):
+    """Un produit ou une vente de produit est refusé."""
+
+
+
+
+def creer_type_chambre(
+    libelle: str,
+    *,
+    nom_raccourci: str | None = None,
+    prix_defaut: float = 0,
+    prix_mini: float = 0,
+    channel_manager_uniquement: bool = False,
+) -> int:
     propre = _exiger_libelle(libelle)
+    raccourci = _exiger_raccourci(nom_raccourci)
+    defaut, mini = _exiger_prix(prix_defaut), _exiger_prix(prix_mini)
     with get_session() as session:
         if _type_existe(session, propre):
             raise CatalogueInvalide("Ce type existe déjà")
-        type_chambre = TypeChambre(libelle=propre)
+        if raccourci is not None and _raccourci_existe(session, raccourci):
+            raise CatalogueInvalide("Ce nom raccourci existe déjà")
+        type_chambre = TypeChambre(
+            libelle=propre,
+            nom_raccourci=raccourci,
+            prix_defaut=defaut,
+            prix_mini=mini,
+            channel_manager_uniquement=channel_manager_uniquement,
+        )
         session.add(type_chambre)
-        _commit_unique(session, "Ce type existe déjà")
+        _commit_type(session)
         return type_chambre.id
+
+
+def enregistrer_type_chambre(
+    type_chambre_id: int,
+    libelle: str,
+    nom_raccourci: str | None,
+    prix_defaut: float,
+    prix_mini: float,
+    channel_manager_uniquement: bool,
+    *,
+    description: str | None = None,
+) -> bool:
+    propre = _exiger_libelle(libelle)
+    raccourci = _exiger_raccourci(nom_raccourci)
+    defaut, mini = _exiger_prix(prix_defaut), _exiger_prix(prix_mini)
+    with get_session() as session:
+        type_chambre = session.get(TypeChambre, type_chambre_id)
+        if type_chambre is None:
+            raise CatalogueInvalide("Ce type est introuvable")
+        description_propre = type_chambre.description if description is None else description.strip()
+        if (
+            type_chambre.libelle == propre
+            and type_chambre.description == description_propre
+            and type_chambre.nom_raccourci == raccourci
+            and type_chambre.prix_defaut == defaut
+            and type_chambre.prix_mini == mini
+            and bool(type_chambre.channel_manager_uniquement) == bool(channel_manager_uniquement)
+        ):
+            return False
+        if type_chambre.libelle != propre and _type_existe(session, propre):
+            raise CatalogueInvalide("Ce type existe déjà")
+        if raccourci is not None and raccourci != type_chambre.nom_raccourci and _raccourci_existe(session, raccourci):
+            raise CatalogueInvalide("Ce nom raccourci existe déjà")
+        type_chambre.libelle = propre
+        type_chambre.description = description_propre
+        type_chambre.nom_raccourci = raccourci
+        type_chambre.prix_defaut = defaut
+        type_chambre.prix_mini = mini
+        type_chambre.channel_manager_uniquement = channel_manager_uniquement
+        session.add(type_chambre)
+        _commit_type(session)
+        return True
 
 
 def renommer_type_chambre(type_chambre_id: int, libelle: str) -> bool:
@@ -72,7 +158,7 @@ def renommer_type_chambre(type_chambre_id: int, libelle: str) -> bool:
         if _type_existe(session, propre):
             raise CatalogueInvalide("Ce type existe déjà")
         type_chambre.libelle = propre
-        _commit_unique(session, "Ce type existe déjà")
+        _commit_type(session)
         return True
 
 
@@ -83,8 +169,79 @@ def supprimer_type_chambre(type_chambre_id: int) -> None:
             raise CatalogueInvalide("Ce type est introuvable")
         if _chambre_cite(session, Chambre.type_chambre_id, type_chambre_id):
             raise CatalogueInvalide("Ce type est utilisé par une chambre")
+        if _virtuelle_cite(session, type_chambre_id):
+            raise CatalogueInvalide("Ce type est utilisé par une chambre virtuelle")
         session.delete(type_chambre)
         _commit_utilise(session, "Ce type est utilisé par une chambre")
+
+
+def creer_chambre_virtuelle(
+    type_chambre_id: int,
+    nom_raccourci: str | None,
+    prix_defaut: float | str | None,
+    prix_mini: float | str | None,
+    *,
+    description: str = "",
+) -> int:
+    raccourci = _exiger_raccourci_obligatoire(nom_raccourci)
+    defaut, mini = _exiger_prix_present(prix_defaut), _exiger_prix_present(prix_mini)
+    with get_session() as session:
+        if session.get(TypeChambre, type_chambre_id) is None:
+            raise CatalogueInvalide("Ce type est introuvable")
+        if _raccourci_virtuel_existe(session, raccourci):
+            raise CatalogueInvalide("Ce nom raccourci existe déjà")
+        virtuelle = ChambreVirtuelle(
+            type_chambre_id=type_chambre_id,
+            description=description.strip(),
+            nom_raccourci=raccourci,
+            prix_defaut=defaut,
+            prix_mini=mini,
+        )
+        session.add(virtuelle)
+        _commit_type(session)
+        return virtuelle.id
+
+
+def enregistrer_chambre_virtuelle(
+    chambre_virtuelle_id: int,
+    nom_raccourci: str | None,
+    prix_defaut: float | str | None,
+    prix_mini: float | str | None,
+    *,
+    description: str | None = None,
+) -> bool:
+    raccourci = _exiger_raccourci_obligatoire(nom_raccourci)
+    defaut, mini = _exiger_prix_present(prix_defaut), _exiger_prix_present(prix_mini)
+    with get_session() as session:
+        virtuelle = session.get(ChambreVirtuelle, chambre_virtuelle_id)
+        if virtuelle is None:
+            raise CatalogueInvalide("Cette chambre virtuelle est introuvable")
+        description_propre = virtuelle.description if description is None else description.strip()
+        if (
+            virtuelle.nom_raccourci == raccourci
+            and virtuelle.description == description_propre
+            and virtuelle.prix_defaut == defaut
+            and virtuelle.prix_mini == mini
+        ):
+            return False
+        if raccourci != virtuelle.nom_raccourci and _raccourci_virtuel_existe(session, raccourci, virtuelle.id):
+            raise CatalogueInvalide("Ce nom raccourci existe déjà")
+        virtuelle.nom_raccourci = raccourci
+        virtuelle.description = description_propre
+        virtuelle.prix_defaut = defaut
+        virtuelle.prix_mini = mini
+        session.add(virtuelle)
+        _commit_type(session)
+        return True
+
+
+def supprimer_chambre_virtuelle(chambre_virtuelle_id: int) -> None:
+    with get_session() as session:
+        virtuelle = session.get(ChambreVirtuelle, chambre_virtuelle_id)
+        if virtuelle is None:
+            raise CatalogueInvalide("Cette chambre virtuelle est introuvable")
+        session.delete(virtuelle)
+        session.commit()
 
 
 def creer_occupation_chambre(nombre_personnes: int, type_lits: str) -> int:
@@ -131,18 +288,44 @@ def creer_chambre(
     *,
     type_chambre_id: int | None = None,
     occupation_chambre_id: int | None = None,
+    etage: int = 0,
+    chambres_virtuelles_ids: list[int] | None = None,
 ) -> int:
+    etage = _exiger_etage(etage)
     with get_session() as session:
         _exiger_liens(session, type_chambre_id, occupation_chambre_id)
+        virtuelles = _exiger_chambres_virtuelles(session, chambres_virtuelles_ids or [])
         chambre = Chambre(
             nom=nom.strip(),
             position=position,
+            etage=etage,
             type_chambre_id=type_chambre_id,
             occupation_chambre_id=occupation_chambre_id,
         )
+        chambre.chambres_virtuelles = virtuelles
         session.add(chambre)
         _commit_liens(session)
         return chambre.id
+
+
+def modifier_etage_chambre(chambre_id: int, etage: int) -> bool:
+    etage = _exiger_etage(etage)
+    with get_session() as session:
+        chambre = session.get(Chambre, chambre_id)
+        if chambre is None:
+            raise CatalogueInvalide("Cette chambre est introuvable")
+        if chambre.etage == etage:
+            return False
+        chambre.etage = etage
+        session.add(chambre)
+        session.commit()
+        return True
+
+
+def _exiger_etage(etage: int) -> int:
+    if isinstance(etage, bool) or not isinstance(etage, (int, float)) or not float(etage).is_integer():
+        raise CatalogueInvalide("L'étage doit être un nombre entier")
+    return int(etage)
 
 
 def attribuer_type_chambre(chambre_id: int, type_chambre_id: int | None) -> bool:
@@ -155,6 +338,19 @@ def attribuer_type_chambre(chambre_id: int, type_chambre_id: int | None) -> bool
         chambre.type_chambre_id = type_chambre_id
         session.add(chambre)
         _commit_lien(session, "Ce type est introuvable")
+        return True
+
+
+def attribuer_chambres_virtuelles(chambre_id: int, chambres_virtuelles_ids: list[int]) -> bool:
+    with get_session() as session:
+        chambre = session.get(Chambre, chambre_id)
+        if chambre is None:
+            raise CatalogueInvalide("Cette chambre est introuvable")
+        virtuelles = _exiger_chambres_virtuelles(session, chambres_virtuelles_ids)
+        if {virtuelle.id for virtuelle in chambre.chambres_virtuelles} == {virtuelle.id for virtuelle in virtuelles}:
+            return False
+        chambre.chambres_virtuelles = virtuelles
+        _commit_lien(session, "Une chambre virtuelle est introuvable")
         return True
 
 
@@ -189,9 +385,15 @@ def creer_client(
     notes: str | None = None,
     pays: str | None = None,
 ) -> int:
+    nom_propre = nom.strip()
+    if nom_propre == NOM_CLIENT_PASSAGE:
+        with _VERROU_CLIENT_PASSAGE, get_session() as session:
+            client = _client_passage(session)
+            session.commit()
+            return client.id
     with get_session() as session:
         client = Client(
-            nom=nom.strip(),
+            nom=nom_propre,
             pays=_vide(pays),
             email=_vide(email),
             telephone=_vide(telephone),
@@ -203,8 +405,17 @@ def creer_client(
         return client.id
 
 
-def creer_reservation(client_id: int) -> int:
+def creer_reservation(client_id: int | None = None) -> int:
+    if client_id is None:
+        with _VERROU_CLIENT_PASSAGE:
+            return _creer_reservation(None)
+    return _creer_reservation(client_id)
+
+
+def _creer_reservation(client_id: int | None) -> int:
     with get_session() as session:
+        if client_id is None:
+            client_id = _client_passage(session).id
         reservation = Reservation(client_id=client_id)
         session.add(reservation)
         session.commit()
@@ -289,6 +500,7 @@ def ajouter_consommation(
             libelle=libelle.strip(),
             quantite=quantite,
             prix_unitaire_centimes=prix_unitaire_centimes,
+            taux_tva_pour_mille=TAUX_TVA_DEFAUT,
         )
         session.add(consommation)
         montant = format_euros(quantite * prix_unitaire_centimes)
@@ -297,6 +509,134 @@ def ajouter_consommation(
         )
         session.commit()
         return consommation.id
+
+
+def creer_produit(
+    nom: str, prix_unitaire_centimes: int, *, taux_tva_pour_mille: int = TAUX_TVA_DEFAUT
+) -> int:
+    propre = _exiger_nom_produit(nom)
+    prix = _exiger_centimes(prix_unitaire_centimes)
+    taux = _exiger_taux_tva(taux_tva_pour_mille)
+    with get_session() as session:
+        if _produit_nom_pris(session, propre):
+            raise ProduitInvalide("Ce produit existe déjà")
+        produit = Produit(nom=propre, prix_unitaire_centimes=prix, taux_tva_pour_mille=taux, actif=True)
+        session.add(produit)
+        _commit_produit(session)
+        return produit.id
+
+
+def modifier_produit(
+    produit_id: int, nom: str, prix_unitaire_centimes: int, *, taux_tva_pour_mille: int = TAUX_TVA_DEFAUT
+) -> bool:
+    propre = _exiger_nom_produit(nom)
+    prix = _exiger_centimes(prix_unitaire_centimes)
+    taux = _exiger_taux_tva(taux_tva_pour_mille)
+    with get_session() as session:
+        produit = session.get(Produit, produit_id)
+        if produit is None:
+            raise ProduitInvalide("Ce produit est introuvable")
+        if produit.nom == propre and produit.prix_unitaire_centimes == prix and produit.taux_tva_pour_mille == taux:
+            return False
+        if produit.nom != propre and _produit_nom_pris(session, propre, sauf=produit_id):
+            raise ProduitInvalide("Ce produit existe déjà")
+        produit.nom = propre
+        produit.prix_unitaire_centimes = prix
+        produit.taux_tva_pour_mille = taux
+        session.add(produit)
+        _commit_produit(session)
+        return True
+
+
+def definir_produit_actif(produit_id: int, actif: bool) -> bool:
+    with get_session() as session:
+        produit = session.get(Produit, produit_id)
+        if produit is None:
+            raise ProduitInvalide("Ce produit est introuvable")
+        if bool(produit.actif) == bool(actif):
+            return False
+        produit.actif = bool(actif)
+        session.add(produit)
+        session.commit()
+        return True
+
+
+def ajouter_consommation_produit(
+    reservation_id: int,
+    produit_id: int,
+    quantite: int,
+    prix_unitaire_centimes: int,
+    user_id: int | None = None,
+) -> int:
+    quantite = _exiger_quantite(quantite)
+    prix = _exiger_centimes(prix_unitaire_centimes)
+    with get_session() as session:
+        if session.get(Reservation, reservation_id) is None:
+            raise ProduitInvalide("Cette réservation est introuvable")
+        produit = session.get(Produit, produit_id)
+        if produit is None:
+            raise ProduitInvalide("Ce produit est introuvable")
+        if not produit.actif:
+            raise ProduitInvalide("Ce produit n'est plus en vente")
+        consommation = Consommation(
+            reservation_id=reservation_id,
+            libelle=produit.nom,
+            quantite=quantite,
+            prix_unitaire_centimes=prix,
+            taux_tva_pour_mille=produit.taux_tva_pour_mille,
+        )
+        session.add(consommation)
+        montant = format_euros(quantite * prix)
+        _journaliser(
+            session,
+            reservation_id,
+            user_id,
+            f"Consommation ajoutée : {quantite} × {consommation.libelle} ({montant})",
+        )
+        try:
+            session.commit()
+        except IntegrityError as erreur:
+            session.rollback()
+            if _nom_sqlite(erreur) == "SQLITE_CONSTRAINT_FOREIGNKEY":
+                raise ProduitInvalide("Cette réservation est introuvable") from erreur
+            raise
+        return consommation.id
+
+
+def modifier_consommation(
+    consommation_id: int,
+    quantite: int,
+    prix_unitaire_centimes: int,
+    jour: date,
+    user_id: int | None = None,
+) -> bool:
+    """Met à jour la ligne vendue. Le catalogue et le libellé restent inchangés."""
+    quantite = _exiger_quantite(quantite)
+    prix = _exiger_centimes(prix_unitaire_centimes)
+    jour = _exiger_jour(jour)
+    with get_session() as session:
+        consommation = session.get(Consommation, consommation_id)
+        if consommation is None:
+            raise ProduitInvalide("Cette consommation est introuvable")
+        if (
+            consommation.quantite == quantite
+            and consommation.prix_unitaire_centimes == prix
+            and _en_local(consommation.date).date() == jour
+        ):
+            return False
+        consommation.quantite = quantite
+        consommation.prix_unitaire_centimes = prix
+        consommation.date = _poser_jour(consommation.date, jour)
+        session.add(consommation)
+        montant = format_euros(quantite * prix)
+        _journaliser(
+            session,
+            consommation.reservation_id,
+            user_id,
+            f"Consommation modifiée : {quantite} × {consommation.libelle} ({montant}) le {jour:%d/%m/%Y}",
+        )
+        session.commit()
+        return True
 
 
 def ajouter_reglement(
@@ -353,23 +693,44 @@ def champs_modifies(avant: dict, apres: dict) -> list[str]:
     return [cle for cle in CHAMPS_FICHE if cle in apres and _comparable(apres[cle]) != _comparable(avant.get(cle))]
 
 
-def enregistrer_fiche(reservation_id: int, user_id: int | None, valeurs: dict) -> list[str]:
-    if "nom" in valeurs and _vide(valeurs["nom"]) is None:
-        raise FicheInvalide("Le nom du client est obligatoire")
+def enregistrer_fiche(
+    reservation_id: int, user_id: int | None, valeurs: dict, client_id: int | None = None
+) -> list[str]:
     with get_session() as session:
         reservation = session.get(Reservation, reservation_id)
         if reservation is None:
             return []
-        cibles = {Client: reservation.client, Reservation: reservation}
-        avant = {cle: getattr(cibles[modele], cle) for cle, (modele, _) in CHAMPS_FICHE.items()}
+        actuel = reservation.client
+        if client_id is None or client_id == actuel.id:
+            cible = actuel
+            changement = False
+        else:
+            cible = session.get(Client, client_id)
+            if cible is None:
+                raise FicheInvalide("Ce client est introuvable")
+            changement = True
+        # Les valeurs affichées sont celles du client choisi : les écrire sur l'ancien mélangerait deux personnes.
+        if _est_passage(cible) and _coordonnees_modifiees(cible, valeurs):
+            raise FicheInvalide("Le client CLIENT PASSAGE ne peut pas être modifié")
+        if not _est_passage(cible) and "nom" in valeurs and _vide(valeurs["nom"]) == NOM_CLIENT_PASSAGE:
+            raise FicheInvalide("Le nom CLIENT PASSAGE est réservé")
+        if "nom" in valeurs and _vide(valeurs["nom"]) is None and not _est_passage(cible):
+            raise FicheInvalide("Le nom du client est obligatoire")
+        cibles = {Client: cible, Reservation: reservation}
+        avant = {
+            cle: getattr(cibles[modele], ATTRIBUTS_FICHE.get(cle, cle)) for cle, (modele, _) in CHAMPS_FICHE.items()
+        }
         modifies = champs_modifies(avant, valeurs)
-        if not modifies:
+        if not modifies and not changement:
             return []
+        if changement:
+            reservation.client = cible
+            session.add(reservation)
         for cle in modifies:
             modele, _ = CHAMPS_FICHE[cle]
-            setattr(cibles[modele], cle, _valeur_fiche(cle, valeurs[cle]))
+            setattr(cibles[modele], ATTRIBUTS_FICHE.get(cle, cle), _valeur_fiche(cle, valeurs[cle]))
             session.add(cibles[modele])
-        libelles = [CHAMPS_FICHE[cle][1] for cle in modifies]
+        libelles = (["Client"] if changement else []) + [CHAMPS_FICHE[cle][1] for cle in modifies]
         _journaliser(session, reservation_id, user_id, f"Fiche modifiée : {', '.join(libelles)}")
         session.commit()
         return libelles
@@ -382,21 +743,37 @@ def facturer(reservation_id: int, user_id: int | None) -> int:
             raise FacturationImpossible("Réservation introuvable")
         if reservation.statut == StatutReservation.annulee:
             raise FacturationImpossible("Une réservation annulée ne peut pas être facturée")
-        # Une seule instruction : le numéro suivant est calculé et posé sans fenêtre pour un second poste.
-        emise = session.exec(
-            update(Reservation)
-            .where(Reservation.id == reservation_id, Reservation.numero_facture.is_(None))
-            .values(
-                numero_facture=select(func.coalesce(func.max(Reservation.numero_facture), 0) + 1).scalar_subquery(),
-                date_facture=date.today(),
-            )
-            .execution_options(synchronize_session=False)
-        ).rowcount
-        session.refresh(reservation)
-        if emise:
-            _journaliser(session, reservation_id, user_id, f"Facture n° {reservation.numero_facture} émise")
-        session.commit()
-        return reservation.numero_facture
+        if reservation.numero_facture is not None:
+            return reservation.numero_facture
+    try:
+        apercu = preparer_apercu(reservation_id, destinataire_de_sejour(reservation_id))
+        return emettre_facture(apercu, uuid4(), user_id=user_id).numero
+    except EmissionImpossible as erreur:
+        courante = obtenir_facture_courante(reservation_id)
+        if courante is not None:
+            return courante.numero
+        raise FacturationImpossible(str(erreur)) from erreur
+
+
+def _client_passage(session: Session) -> Client:
+    client = session.exec(select(Client).where(Client.nom == NOM_CLIENT_PASSAGE).order_by(Client.id)).first()
+    if client is not None:
+        return client
+    client = Client(nom=NOM_CLIENT_PASSAGE)
+    session.add(client)
+    session.flush()
+    return client
+
+
+def _est_passage(client: Client) -> bool:
+    return client.nom.strip() == NOM_CLIENT_PASSAGE
+
+
+def _coordonnees_modifiees(client: Client, valeurs: dict) -> bool:
+    return any(
+        cle in valeurs and _comparable(valeurs[cle]) != _comparable(getattr(client, ATTRIBUTS_FICHE.get(cle, cle)))
+        for cle in CHAMPS_CLIENT
+    )
 
 
 def _journaliser(session: Session, reservation_id: int, user_id: int | None, description: str) -> None:
@@ -432,11 +809,114 @@ def _vide(valeur: str | None) -> str | None:
     return texte or None
 
 
+def _exiger_nom_produit(nom: str | None) -> str:
+    propre = _vide(nom)
+    if propre is None:
+        raise ProduitInvalide("Le nom est obligatoire")
+    return propre
+
+
+def _exiger_centimes(prix: int) -> int:
+    if isinstance(prix, bool) or not isinstance(prix, int):
+        raise ProduitInvalide("Le prix doit être un entier de centimes")
+    if prix < 0:
+        raise ProduitInvalide("Le prix ne peut pas être négatif")
+    return prix
+
+
+def _exiger_taux_tva(taux: int) -> int:
+    if isinstance(taux, bool) or not isinstance(taux, int) or taux not in TAUX_TVA_POUR_MILLE:
+        raise ProduitInvalide("Le taux de TVA n'est pas reconnu")
+    return taux
+
+
+def _exiger_quantite(quantite: int) -> int:
+    if isinstance(quantite, bool) or not isinstance(quantite, int) or quantite <= 0:
+        raise ProduitInvalide("La quantité doit être un entier supérieur à 0")
+    return quantite
+
+
+def _exiger_jour(jour: date) -> date:
+    if type(jour) is not date:
+        raise ProduitInvalide("La date n'est pas reconnue")
+    return jour
+
+
+def _en_local(moment: datetime) -> datetime:
+    """SQLite rend les horodatages sans fuseau ; l'application les écrit en UTC."""
+    return (moment if moment.tzinfo else moment.replace(tzinfo=UTC)).astimezone()
+
+
+def _poser_jour(moment: datetime, jour: date) -> datetime:
+    """Change le jour affiché et conserve l'heure locale, y compris au changement d'heure.
+
+    astimezone() rend un décalage fixe (CEST, CET). On l'ajuste jusqu'à ce que l'heure affichée
+    soit celle d'origine.
+    """
+    local = _en_local(moment)
+    voulu = datetime(jour.year, jour.month, jour.day, local.hour, local.minute, local.second, local.microsecond)
+    candidat = voulu.replace(tzinfo=UTC)
+    for _ in range(3):
+        affiche = _en_local(candidat).replace(tzinfo=None)
+        decalage = voulu - affiche
+        if decalage == timedelta(0):
+            return candidat
+        candidat += decalage
+    return candidat
+
+
+def _produit_nom_pris(session: Session, nom: str, sauf: int | None = None) -> bool:
+    requete = select(Produit.id).where(Produit.nom == nom)
+    if sauf is not None:
+        requete = requete.where(Produit.id != sauf)
+    return session.exec(requete).first() is not None
+
+
+def _commit_produit(session: Session) -> None:
+    try:
+        session.commit()
+    except IntegrityError as erreur:
+        session.rollback()
+        if _nom_sqlite(erreur) == "SQLITE_CONSTRAINT_UNIQUE":
+            raise ProduitInvalide("Ce produit existe déjà") from erreur
+        raise
+
+
 def _exiger_libelle(libelle: str | None) -> str:
     propre = _vide(libelle)
     if propre is None:
         raise CatalogueInvalide("Le libellé est obligatoire")
     return propre
+
+
+def _exiger_raccourci(nom_raccourci: str | None) -> str | None:
+    propre = _vide(nom_raccourci)
+    if propre is not None and len(propre) > 4:
+        raise CatalogueInvalide("Le nom raccourci tient sur 4 caractères")
+    return propre
+
+
+def _exiger_raccourci_obligatoire(nom_raccourci: str | None) -> str:
+    propre = _exiger_raccourci(nom_raccourci)
+    if propre is None:
+        raise CatalogueInvalide("Le nom raccourci est obligatoire")
+    return propre
+
+
+def _exiger_prix(prix: float) -> float:
+    try:
+        valeur = round(float(prix), 2)
+    except (TypeError, ValueError) as erreur:
+        raise CatalogueInvalide("Le prix ne peut pas être négatif") from erreur
+    if valeur < 0:
+        raise CatalogueInvalide("Le prix ne peut pas être négatif")
+    return valeur
+
+
+def _exiger_prix_present(prix: float | str | None) -> float:
+    if prix is None or (isinstance(prix, str) and not prix.strip()):
+        raise CatalogueInvalide("Le prix est obligatoire")
+    return _exiger_prix(prix)
 
 
 def _exiger_personnes(nombre_personnes: int) -> int:
@@ -463,8 +943,36 @@ def _exiger_liens(session: Session, type_chambre_id: int | None, occupation_cham
         raise CatalogueInvalide("Cette occupation est introuvable")
 
 
+def _exiger_chambres_virtuelles(session: Session, identifiants: list[int]) -> list[ChambreVirtuelle]:
+    ids = set(identifiants)
+    if not ids:
+        return []
+    virtuelles = list(session.exec(select(ChambreVirtuelle).where(ChambreVirtuelle.id.in_(ids))))
+    if len(virtuelles) != len(ids):
+        raise CatalogueInvalide("Une chambre virtuelle est introuvable")
+    return virtuelles
+
+
 def _type_existe(session: Session, libelle: str) -> bool:
     return session.exec(select(TypeChambre.id).where(TypeChambre.libelle == libelle)).first() is not None
+
+
+def _raccourci_existe(session: Session, nom_raccourci: str) -> bool:
+    return session.exec(select(TypeChambre.id).where(TypeChambre.nom_raccourci == nom_raccourci)).first() is not None
+
+
+def _raccourci_virtuel_existe(session: Session, nom_raccourci: str, sauf: int | None = None) -> bool:
+    requete = select(ChambreVirtuelle.id).where(ChambreVirtuelle.nom_raccourci == nom_raccourci)
+    if sauf is not None:
+        requete = requete.where(ChambreVirtuelle.id != sauf)
+    return session.exec(requete).first() is not None
+
+
+def _virtuelle_cite(session: Session, type_chambre_id: int) -> bool:
+    return (
+        session.exec(select(ChambreVirtuelle.id).where(ChambreVirtuelle.type_chambre_id == type_chambre_id)).first()
+        is not None
+    )
 
 
 def _occupation_existe(session: Session, personnes: int, lits: str) -> bool:
@@ -485,6 +993,17 @@ def _chambre_cite(session: Session, colonne, valeur: int) -> bool:
 
 def _nom_sqlite(erreur: IntegrityError) -> str:
     return getattr(erreur.orig, "sqlite_errorname", "")
+
+
+def _commit_type(session: Session) -> None:
+    try:
+        session.commit()
+    except IntegrityError as erreur:
+        if _nom_sqlite(erreur) != "SQLITE_CONSTRAINT_UNIQUE":
+            raise
+        if "nom_raccourci" in str(erreur.orig):
+            raise CatalogueInvalide("Ce nom raccourci existe déjà") from erreur
+        raise CatalogueInvalide("Ce type existe déjà") from erreur
 
 
 def _commit_unique(session: Session, message: str) -> None:
@@ -519,5 +1038,5 @@ def _commit_liens(session: Session) -> None:
         session.commit()
     except IntegrityError as erreur:
         if _nom_sqlite(erreur) == "SQLITE_CONSTRAINT_FOREIGNKEY":
-            raise CatalogueInvalide("Ce type ou cette occupation est introuvable") from erreur
+            raise CatalogueInvalide("Ce type, cette occupation ou cette chambre virtuelle est introuvable") from erreur
         raise

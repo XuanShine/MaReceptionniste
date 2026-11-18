@@ -1,5 +1,7 @@
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, timedelta
+from difflib import SequenceMatcher
 from typing import NamedTuple
 
 from sqlalchemy.orm import selectinload
@@ -9,11 +11,14 @@ from ma_receptionniste.db import get_session
 from ma_receptionniste.facturation import montant_consommation, montant_sejour, nuits, taxe_du_sejour, totaux
 from ma_receptionniste.models import (
     Chambre,
+    ChambreChambreVirtuelle,
+    ChambreVirtuelle,
     Client,
     EtatChambre,
     Historique,
     ModeReglement,
     OccupationChambre,
+    Produit,
     Reservation,
     Sejour,
     StatutReservation,
@@ -111,6 +116,7 @@ def _chambre_dict(chambre: Chambre) -> dict:
         "id": chambre.id,
         "nom": chambre.nom,
         "position": chambre.position,
+        "etage": chambre.etage,
         "etat": etat,
         "etat_label": ETAT_LABEL.get(EtatChambre(etat), etat),
         "type_chambre": _libelle_type(chambre),
@@ -184,13 +190,44 @@ def lister_chambres() -> list[dict]:
 def ecran_parametres() -> dict:
     with get_session() as session:
         types = session.exec(select(TypeChambre).order_by(TypeChambre.libelle)).all()
+        virtuelles = session.exec(
+            select(ChambreVirtuelle).order_by(ChambreVirtuelle.nom_raccourci, ChambreVirtuelle.id)
+        ).all()
         occupations = session.exec(
             select(OccupationChambre).order_by(OccupationChambre.nombre_personnes, OccupationChambre.type_lits)
         ).all()
         chambres = _lire_chambres(session)
+        liens_par_chambre: dict[int, list[int]] = {}
+        requete_liens = select(ChambreChambreVirtuelle).order_by(ChambreChambreVirtuelle.chambre_virtuelle_id)
+        for lien in session.exec(requete_liens):
+            liens_par_chambre.setdefault(lien.chambre_id, []).append(lien.chambre_virtuelle_id)
+        for chambre in chambres:
+            chambre["chambres_virtuelles_ids"] = liens_par_chambre.get(chambre["id"], [])
+        virtuelles_par_type: dict[int, list[dict]] = {}
+        for virtuelle in virtuelles:
+            virtuelles_par_type.setdefault(virtuelle.type_chambre_id, []).append(
+                {
+                    "id": virtuelle.id,
+                    "wubook_id": virtuelle.wubook_id,
+                    "description": virtuelle.description,
+                    "nom_raccourci": virtuelle.nom_raccourci.strip(),
+                    "prix_defaut": virtuelle.prix_defaut,
+                    "prix_mini": virtuelle.prix_mini,
+                }
+            )
     return {
         "types": [
-            {"id": type_chambre.id, "libelle": type_chambre.libelle.strip()}
+            {
+                "id": type_chambre.id,
+                "wubook_id": type_chambre.wubook_id,
+                "libelle": type_chambre.libelle.strip(),
+                "description": type_chambre.description,
+                "nom_raccourci": (type_chambre.nom_raccourci or "").strip() or None,
+                "prix_defaut": type_chambre.prix_defaut,
+                "prix_mini": type_chambre.prix_mini,
+                "channel_manager_uniquement": bool(type_chambre.channel_manager_uniquement),
+                "virtuelles": virtuelles_par_type.get(type_chambre.id, []),
+            }
             for type_chambre in types
             if type_chambre.libelle and type_chambre.libelle.strip()
         ],
@@ -202,33 +239,125 @@ def ecran_parametres() -> dict:
             }
             for occupation in occupations
         ],
+        "virtuelles": [
+            {
+                "id": virtuelle.id,
+                "nom_raccourci": virtuelle.nom_raccourci.strip(),
+                "type_chambre_id": virtuelle.type_chambre_id,
+            }
+            for virtuelle in virtuelles
+        ],
         "chambres": chambres,
         "position": max((chambre["position"] for chambre in chambres), default=0) + 1,
+    }
+
+
+def _client_dict(client: Client) -> dict:
+    return {
+        "id": client.id,
+        "nom": client.nom,
+        "pays": client.pays,
+        "email": client.email,
+        "telephone": client.telephone,
+        "adresse": client.adresse,
+        "notes": client.notes,
     }
 
 
 def lister_clients() -> list[dict]:
     with get_session() as session:
         clients = session.exec(select(Client).order_by(Client.cree_le.desc())).all()
-        return [
-            {
-                "id": client.id,
-                "nom": client.nom,
-                "pays": client.pays,
-                "email": client.email,
-                "telephone": client.telephone,
-                "adresse": client.adresse,
-                "notes": client.notes,
-            }
-            for client in clients
-        ]
+        return [_client_dict(client) for client in clients]
 
 
-def options_clients() -> dict[int, str]:
-    # ui.select attend identifiant → libellé.
-    return {
-        client["id"]: f"{client['nom']} #{client['id']}" for client in lister_clients()
-    }
+def lister_produits(*, actifs_seulement: bool = False) -> list[Produit]:
+    """Exemplaires détachés : la session est déjà fermée quand la page les lit."""
+    with get_session() as session:
+        requete = select(
+            Produit.id, Produit.nom, Produit.prix_unitaire_centimes, Produit.taux_tva_pour_mille, Produit.actif
+        )
+        if actifs_seulement:
+            requete = requete.where(Produit.actif.is_(True))
+        lignes = list(session.exec(requete).all())
+    copies = [
+        Produit(
+            id=identifiant,
+            nom=nom,
+            prix_unitaire_centimes=prix,
+            taux_tva_pour_mille=taux,
+            actif=bool(actif),
+        )
+        for identifiant, nom, prix, taux, actif in lignes
+    ]
+    copies.sort(key=lambda produit: (produit.nom.casefold(), produit.id or 0))
+    return copies
+
+
+def lire_client(client_id: int) -> dict | None:
+    with get_session() as session:
+        client = session.get(Client, client_id)
+        return _client_dict(client) if client is not None else None
+
+
+def normaliser_nom(nom: str | None) -> str:
+    """Minuscules, sans accents ni espaces superflus, pour comparer les noms saisis."""
+    decompose = unicodedata.normalize("NFD", (nom or "").casefold())
+    sans_accent = "".join(caractere for caractere in decompose if unicodedata.category(caractere) != "Mn")
+    return " ".join(sans_accent.split())
+
+
+def _detail_client(client: dict) -> str | None:
+    for cle in ("telephone", "email", "pays"):
+        texte = client.get(cle)
+        if texte and texte.strip():
+            return texte.strip()
+    return None
+
+
+def libelle_client(client: dict) -> str:
+    detail = _detail_client(client)
+    identifiant = f"n° {client['id']}"
+    if detail is None:
+        return f"{client['nom']} · {identifiant}"
+    return f"{client['nom']} · {detail} · {identifiant}"
+
+
+def _proximite(requete: str, nom: str) -> float:
+    scores = [SequenceMatcher(None, requete, nom).ratio()]
+    compact_requete = requete.replace(" ", "")
+    compact_nom = nom.replace(" ", "")
+    if compact_requete and compact_nom:
+        scores.append(SequenceMatcher(None, compact_requete, compact_nom).ratio())
+    scores.extend(SequenceMatcher(None, requete, mot).ratio() for mot in nom.split())
+    return max(scores)
+
+
+def rechercher_clients(texte: str) -> list[dict]:
+    """Exact, puis contenant, puis noms proches. Une recherche vide renvoie tout le répertoire."""
+    clients = lister_clients()
+    requete = normaliser_nom(texte)
+    if not requete:
+        return sorted(clients, key=lambda client: (normaliser_nom(client["nom"]), client["id"]))
+    exacts: list[dict] = []
+    contenus: list[dict] = []
+    proches: list[tuple[float, dict]] = []
+    compact_requete = requete.replace(" ", "")
+    for client in clients:
+        nom = normaliser_nom(client["nom"])
+        if nom == requete:
+            exacts.append(client)
+            continue
+        compact_nom = nom.replace(" ", "")
+        if requete in nom or (compact_requete and compact_requete in compact_nom):
+            contenus.append(client)
+            continue
+        score = _proximite(requete, nom)
+        if score >= 0.6:
+            proches.append((score, client))
+    exacts.sort(key=lambda client: client["id"])
+    contenus.sort(key=lambda client: (normaliser_nom(client["nom"]), client["id"]))
+    proches.sort(key=lambda item: (-item[0], normaliser_nom(item[1]["nom"]), item[1]["id"]))
+    return exacts + contenus + [client for _, client in proches]
 
 
 def options_chambres() -> dict[int, str]:
@@ -241,9 +370,7 @@ def options_chambres() -> dict[int, str]:
 def _avec_tout(requete):
     return requete.options(
         selectinload(Reservation.client),
-        selectinload(Reservation.sejours)
-        .selectinload(Sejour.chambre)
-        .selectinload(Chambre.type_de_chambre),
+        selectinload(Reservation.sejours).selectinload(Sejour.chambre).selectinload(Chambre.type_de_chambre),
         selectinload(Reservation.consommations),
         selectinload(Reservation.reglements),
     )
@@ -303,6 +430,7 @@ def fiche_sejour(reservation_id: int) -> dict | None:
                 "telephone": client.telephone,
                 "email": client.email,
                 "adresse": client.adresse,
+                "notes_client": client.notes,
             },
             "reservation": {
                 "statut": StatutReservation(str(reservation.statut)),

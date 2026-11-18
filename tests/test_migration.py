@@ -3,6 +3,7 @@
 from datetime import date
 
 import pytest
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, create_engine, select
 
 from ma_receptionniste.db import (
@@ -13,6 +14,7 @@ from ma_receptionniste.db import (
 )
 from ma_receptionniste.models import (
     Chambre,
+    ChambreVirtuelle,
     Client,
     Consommation,
     ModeReglement,
@@ -294,15 +296,46 @@ INSERT INTO chambre (id, nom, position, etat, type_chambre_id, occupation_chambr
 """
 
 
+def test_la_colonne_tarif_bb_est_retiree() -> None:
+    engine = ancienne_base(
+        "CREATE TABLE type_chambre ("
+        "id INTEGER NOT NULL, libelle VARCHAR NOT NULL, tarif_bb BOOLEAN NOT NULL DEFAULT 0, PRIMARY KEY (id)"
+        ");"
+        "INSERT INTO type_chambre (id, libelle, tarif_bb) VALUES (9, 'Double', 1);"
+    )
+
+    ajouter_colonnes_manquantes(engine)
+
+    assert "tarif_bb" not in _colonnes(engine, "type_chambre")
+    with Session(engine) as session:
+        assert session.get(TypeChambre, 9).libelle == "Double"
+    assert ajouter_colonnes_manquantes(engine) == []
+
+
 def test_une_base_htmx_deja_migree_garde_ses_identifiants() -> None:
     engine = ancienne_base(SCHEMA_HTMX)
 
-    assert ajouter_colonnes_manquantes(engine) == []
+    assert ajouter_colonnes_manquantes(engine) == [
+        "chambre.etage",
+        "type_chambre.wubook_id",
+        "type_chambre.description",
+        "type_chambre.disponibilite",
+        "type_chambre.nom_raccourci",
+        "type_chambre.prix_defaut",
+        "type_chambre.prix_mini",
+        "type_chambre.channel_manager_uniquement",
+    ]
     assert ajouter_colonnes_manquantes(engine) == []
 
     with Session(engine) as session:
-        assert session.get(TypeChambre, 9).libelle == "Double"
+        type_chambre = session.get(TypeChambre, 9)
+        assert type_chambre.libelle == "Double"
+        assert (type_chambre.description, type_chambre.disponibilite) == ("", 0)
+        assert type_chambre.nom_raccourci is None
+        assert (type_chambre.prix_defaut, type_chambre.prix_mini) == (0, 0)
+        assert type_chambre.channel_manager_uniquement is False
         chambre = session.get(Chambre, 1)
+        assert chambre.etage == 0
         assert (chambre.type_chambre_id, chambre.occupation_chambre_id) == (9, 4)
         assert session.get(OccupationChambre, 4).type_lits == "Twin"
     assert "uq_type_chambre_libelle" in _index(engine, "type_chambre")
@@ -355,15 +388,70 @@ def test_la_base_wubook_garde_ses_lignes_et_accepte_un_nouveau_libelle() -> None
     with Session(engine) as session:
         assert session.exec(select(OccupationChambre)).all() == []
         assert [chambre.type_chambre_id for chambre in session.exec(select(Chambre).order_by(Chambre.nom))] == [9, 9]
+        double = session.get(TypeChambre, 9)
+        assert double.wubook_id == 90
+        assert (double.nom_raccourci, double.prix_defaut, double.prix_mini, double.channel_manager_uniquement) == (
+            "DBL",
+            80,
+            0,
+            False,
+        )
+        queen = session.get(TypeChambre, 10)
+        assert (queen.nom_raccourci, queen.prix_defaut, queen.libelle) == ("QN", 90, "King")
         session.add(TypeChambre(libelle="Suite"))
         session.commit()
         suite = session.exec(select(TypeChambre).where(TypeChambre.libelle == "Suite")).one()
         assert suite.id not in {9, 10, 11}
+        assert suite.nom_raccourci is None
     with engine.connect() as connexion:
         suite = connexion.exec_driver_sql(
             "SELECT wubook_id, name, shortname, beds, price, libelle FROM type_chambre WHERE libelle = 'Suite'"
         ).one()
     assert suite == (None, None, None, 1, 0, "Suite")
+
+
+def test_une_base_sans_wubook_id_recoit_la_colonne_nullable() -> None:
+    engine = ancienne_base(
+        "CREATE TABLE type_chambre (id INTEGER PRIMARY KEY, libelle VARCHAR NOT NULL);"
+        "INSERT INTO type_chambre (id, libelle) VALUES (1, 'Double');"
+    )
+
+    assert "type_chambre.wubook_id" in ajouter_colonnes_manquantes(engine)
+    assert ajouter_colonnes_manquantes(engine) == []
+    with Session(engine) as session:
+        type_chambre = session.get(TypeChambre, 1)
+        assert type_chambre.wubook_id is None
+        type_chambre.wubook_id = 12345
+        session.commit()
+    with Session(engine) as session:
+        assert session.get(TypeChambre, 1).wubook_id == 12345
+
+
+@pytest.mark.parametrize("colonne_presente", [False, True])
+def test_wubook_id_des_chambres_virtuelles_est_ajoute_ou_preserve(colonne_presente: bool) -> None:
+    colonne = ", wubook_id INTEGER" if colonne_presente else ""
+    engine = ancienne_base(
+        "CREATE TABLE type_chambre (id INTEGER PRIMARY KEY, libelle VARCHAR NOT NULL);"
+        "INSERT INTO type_chambre (id, libelle) VALUES (1, 'Double');"
+        "CREATE TABLE chambre_virtuelle ("
+        "id INTEGER PRIMARY KEY, type_chambre_id INTEGER NOT NULL, nom_raccourci VARCHAR(4) NOT NULL UNIQUE, "
+        f"prix_defaut FLOAT NOT NULL, prix_mini FLOAT NOT NULL{colonne});"
+        "INSERT INTO chambre_virtuelle (id, type_chambre_id, nom_raccourci, prix_defaut, prix_mini) "
+        "VALUES (1, 1, 'DBL', 80, 50);"
+        + ("UPDATE chambre_virtuelle SET wubook_id = 12345;" if colonne_presente else "")
+    )
+
+    ajoutees = ajouter_colonnes_manquantes(engine)
+    assert ("chambre_virtuelle.wubook_id" in ajoutees) is not colonne_presente
+    assert ajouter_colonnes_manquantes(engine) == []
+    with Session(engine) as session:
+        virtuelle = session.get(ChambreVirtuelle, 1)
+        assert virtuelle.wubook_id == (12345 if colonne_presente else None)
+        assert (virtuelle.nom_raccourci, virtuelle.prix_defaut, virtuelle.prix_mini) == ("DBL", 80, 50)
+        virtuelle.wubook_id = 67890
+        session.commit()
+    with Session(engine) as session:
+        assert session.get(ChambreVirtuelle, 1).wubook_id == 67890
 
 
 SCHEMA_LIBELLES_DOUBLES = """
@@ -377,6 +465,46 @@ CREATE TABLE chambre (
 );
 INSERT INTO chambre (id, nom, position, etat, type_chambre_id) VALUES (1, '101', 1, 'pret', 1);
 """
+
+
+def test_les_prix_wubook_sont_repris_une_seule_fois() -> None:
+    engine = ancienne_base(
+        "CREATE TABLE type_chambre ("
+        "id INTEGER NOT NULL, libelle VARCHAR NOT NULL, shortname VARCHAR, "
+        "price FLOAT, min_price FLOAT, woodoo INTEGER, PRIMARY KEY (id)"
+        ");"
+        "INSERT INTO type_chambre (id, libelle, shortname, price, min_price, woodoo) "
+        "VALUES (9, 'Triple Balcon', '3B', 110, 50, 1);"
+    )
+
+    ajouter_colonnes_manquantes(engine)
+
+    with Session(engine) as session:
+        type_chambre = session.get(TypeChambre, 9)
+        assert type_chambre.nom_raccourci == "3B"
+        assert (type_chambre.prix_defaut, type_chambre.prix_mini) == (110, 50)
+        assert type_chambre.channel_manager_uniquement is True
+        type_chambre.prix_defaut = 120
+        session.add(type_chambre)
+        session.commit()
+
+    assert ajouter_colonnes_manquantes(engine) == []
+    with Session(engine) as session:
+        assert session.get(TypeChambre, 9).prix_defaut == 120
+
+
+def test_des_noms_raccourcis_en_double_annulent_la_migration() -> None:
+    engine = ancienne_base(
+        "CREATE TABLE type_chambre ("
+        "id INTEGER NOT NULL, libelle VARCHAR NOT NULL, shortname VARCHAR, PRIMARY KEY (id)"
+        ");"
+        "INSERT INTO type_chambre (id, libelle, shortname) VALUES (1, 'Double', 'DBL'), (2, 'Twin', 'DBL');"
+    )
+
+    with pytest.raises(CatalogueIllisible):
+        ajouter_colonnes_manquantes(engine)
+
+    assert "nom_raccourci" not in _colonnes(engine, "type_chambre")
 
 
 def test_des_libelles_en_double_annulent_la_migration() -> None:
@@ -394,3 +522,189 @@ def test_des_libelles_en_double_annulent_la_migration() -> None:
             (2, "Double"),
         ]
         assert connexion.exec_driver_sql("SELECT type_chambre_id FROM chambre").scalar_one() == 1
+
+
+SCHEMA_CELLULES_VIRTUELLES = """
+CREATE TABLE option_virtuelle (
+    id INTEGER PRIMARY KEY, nom VARCHAR NOT NULL UNIQUE, formule_prix VARCHAR NOT NULL, description VARCHAR
+);
+CREATE TABLE cellule_virtuelle (
+    id INTEGER PRIMARY KEY,
+    type_chambre_id INTEGER NOT NULL REFERENCES type_chambre(id),
+    option_id INTEGER NOT NULL REFERENCES option_virtuelle(id),
+    shortname VARCHAR NOT NULL UNIQUE,
+    UNIQUE (type_chambre_id, option_id)
+);
+INSERT INTO option_virtuelle (id, nom, formule_prix, description)
+    VALUES (1, 'Petit Déjeuner', 'x+10*p', 'Supplément par personne');
+INSERT INTO cellule_virtuelle (id, type_chambre_id, option_id, shortname) VALUES (1, 9, 1, '2BBB');
+"""
+
+
+def test_les_cellules_historiques_sont_archivees_sans_bloquer_les_types() -> None:
+    engine = ancienne_base("PRAGMA foreign_keys=ON;" + SCHEMA_WUBOOK + SCHEMA_CELLULES_VIRTUELLES)
+
+    create_db_and_tables(engine)
+    assert ajouter_colonnes_manquantes(engine) == []
+
+    with engine.connect() as connexion:
+        tables = {ligne[0] for ligne in connexion.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert {"archive_cellule_virtuelle", "archive_option_virtuelle"} <= tables
+        assert not {"cellule_virtuelle", "option_virtuelle"} & tables
+        assert connexion.exec_driver_sql("SELECT * FROM archive_cellule_virtuelle").one() == (
+            1,
+            9,
+            1,
+            "2BBB",
+            90,
+            "Double",
+        )
+        assert connexion.exec_driver_sql("SELECT * FROM archive_option_virtuelle").one() == (
+            1,
+            "Petit Déjeuner",
+            "x+10*p",
+            "Supplément par personne",
+        )
+        assert connexion.exec_driver_sql("PRAGMA foreign_key_list('archive_cellule_virtuelle')").all() == []
+        assert connexion.exec_driver_sql("PRAGMA foreign_key_list('archive_option_virtuelle')").all() == []
+        assert connexion.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+    with Session(engine) as session:
+        assert session.get(TypeChambre, 9).wubook_id == 90
+        assert session.get(Chambre, 1).type_chambre_id == 9
+        assert session.get(Chambre, 2).type_chambre_id == 9
+        assert session.exec(select(ChambreVirtuelle)).all() == []
+
+    # L'archive ne doit plus empêcher le remplacement du catalogue.
+    with engine.begin() as connexion:
+        connexion.exec_driver_sql("UPDATE chambre SET type_chambre_id = NULL")
+        connexion.exec_driver_sql("DELETE FROM type_chambre")
+        assert connexion.exec_driver_sql("SELECT COUNT(*) FROM archive_cellule_virtuelle").scalar_one() == 1
+        assert connexion.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+
+
+def test_un_conflit_d_archive_ne_supprime_pas_les_donnees_historiques() -> None:
+    engine = ancienne_base(
+        "PRAGMA foreign_keys=ON;"
+        + SCHEMA_WUBOOK
+        + SCHEMA_CELLULES_VIRTUELLES
+        + "CREATE TABLE archive_option_virtuelle (id INTEGER PRIMARY KEY);"
+        + "INSERT INTO archive_option_virtuelle (id) VALUES (99);"
+    )
+
+    with pytest.raises(OperationalError, match="already exists"):
+        ajouter_colonnes_manquantes(engine)
+
+    with engine.connect() as connexion:
+        assert connexion.exec_driver_sql("SELECT shortname FROM cellule_virtuelle").scalar_one() == "2BBB"
+        assert connexion.exec_driver_sql("SELECT formule_prix FROM option_virtuelle").scalar_one() == "x+10*p"
+        assert connexion.exec_driver_sql("SELECT id FROM archive_option_virtuelle").scalar_one() == 99
+        assert (
+            connexion.exec_driver_sql("SELECT name FROM sqlite_master WHERE name='archive_cellule_virtuelle'").all()
+            == []
+        )
+        assert connexion.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+
+
+@pytest.mark.parametrize("champs_presents", [False, True])
+def test_descriptions_disponibilite_et_etage_sont_ajoutes_ou_preserves(champs_presents: bool) -> None:
+    type_champs = ", description VARCHAR NOT NULL DEFAULT '', disponibilite INTEGER NOT NULL DEFAULT 0"
+    description = ", description VARCHAR NOT NULL DEFAULT ''"
+    etage = ", etage INTEGER NOT NULL DEFAULT 0"
+    engine = ancienne_base(
+        "CREATE TABLE type_chambre (id INTEGER PRIMARY KEY, libelle VARCHAR NOT NULL, availability INTEGER"
+        + (type_champs if champs_presents else "")
+        + ");"
+        "INSERT INTO type_chambre (id, libelle, availability) VALUES (1, 'Double', 6);"
+        "CREATE TABLE chambre (id INTEGER PRIMARY KEY, nom VARCHAR NOT NULL, position INTEGER NOT NULL, "
+        "etat VARCHAR NOT NULL" + (etage if champs_presents else "") + ");"
+        "INSERT INTO chambre (id, nom, position, etat) VALUES (1, '101', 1, 'pret');"
+        "CREATE TABLE chambre_virtuelle (id INTEGER PRIMARY KEY, type_chambre_id INTEGER NOT NULL, "
+        "nom_raccourci VARCHAR(4) NOT NULL UNIQUE, prix_defaut FLOAT NOT NULL, prix_mini FLOAT NOT NULL"
+        + (description if champs_presents else "")
+        + ");"
+        "INSERT INTO chambre_virtuelle (id, type_chambre_id, nom_raccourci, prix_defaut, prix_mini) "
+        "VALUES (1, 1, 'DBL', 80, 50);"
+        + (
+            "UPDATE type_chambre SET description='Avec balcon', disponibilite=3;"
+            "UPDATE chambre_virtuelle SET description='Petit déjeuner inclus';"
+            "UPDATE chambre SET etage=2;"
+            if champs_presents
+            else ""
+        )
+    )
+
+    ajoutees = ajouter_colonnes_manquantes(engine)
+    for colonne in (
+        "type_chambre.description",
+        "type_chambre.disponibilite",
+        "chambre_virtuelle.description",
+        "chambre.etage",
+    ):
+        assert (colonne in ajoutees) is not champs_presents
+    with Session(engine) as session:
+        type_chambre = session.get(TypeChambre, 1)
+        virtuelle = session.get(ChambreVirtuelle, 1)
+        chambre = session.get(Chambre, 1)
+        assert type_chambre.description == ("Avec balcon" if champs_presents else "")
+        assert type_chambre.disponibilite == (3 if champs_presents else 6)
+        assert virtuelle.description == ("Petit déjeuner inclus" if champs_presents else "")
+        assert chambre.etage == (2 if champs_presents else 0)
+        type_chambre.description = "Vue sur mer"
+        type_chambre.disponibilite = 8
+        virtuelle.description = "Occupation simple"
+        chambre.etage = -1
+        session.add_all([type_chambre, virtuelle, chambre])
+        session.commit()
+
+    assert ajouter_colonnes_manquantes(engine) == []
+    with Session(engine) as session:
+        assert session.get(TypeChambre, 1).description == "Vue sur mer"
+        assert session.get(TypeChambre, 1).disponibilite == 8
+        assert session.get(ChambreVirtuelle, 1).description == "Occupation simple"
+        assert session.get(Chambre, 1).etage == -1
+
+
+def test_migration_cree_et_preserve_la_table_de_liaison() -> None:
+    engine = ancienne_base(
+        "PRAGMA foreign_keys=ON;" + SCHEMA_HTMX + "CREATE TABLE chambre_virtuelle ("
+        "id INTEGER PRIMARY KEY, type_chambre_id INTEGER NOT NULL REFERENCES type_chambre(id), "
+        "nom_raccourci VARCHAR(4) NOT NULL UNIQUE, prix_defaut FLOAT NOT NULL, prix_mini FLOAT NOT NULL);"
+        "INSERT INTO chambre_virtuelle (id, type_chambre_id, nom_raccourci, prix_defaut, prix_mini) "
+        "VALUES (7, 9, 'DBL', 80, 50);"
+    )
+    with engine.connect() as connexion:
+        assert connexion.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+        assert (
+            connexion.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='chambre_chambre_virtuelle'"
+            ).all()
+            == []
+        )
+
+    create_db_and_tables(engine)
+
+    with Session(engine) as session:
+        chambre = session.get(Chambre, 1)
+        virtuelle = session.get(ChambreVirtuelle, 7)
+        assert (chambre.nom, chambre.type_chambre_id, chambre.occupation_chambre_id) == ("101", 9, 4)
+        assert (virtuelle.nom_raccourci, virtuelle.type_chambre_id, virtuelle.prix_defaut) == ("DBL", 9, 80)
+        assert chambre.chambres_virtuelles == []
+        assert virtuelle.chambres == []
+        chambre.chambres_virtuelles.append(virtuelle)
+        session.commit()
+
+    create_db_and_tables(engine)
+
+    with Session(engine) as session:
+        assert [v.id for v in session.get(Chambre, 1).chambres_virtuelles] == [7]
+        assert [c.id for c in session.get(ChambreVirtuelle, 7).chambres] == [1]
+        assert session.get(TypeChambre, 9).libelle == "Double"
+        assert session.get(OccupationChambre, 4).type_lits == "Twin"
+    with engine.connect() as connexion:
+        assert connexion.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+        cles = connexion.exec_driver_sql("PRAGMA foreign_key_list('chambre_chambre_virtuelle')").all()
+        assert {(cle[2], cle[3], cle[4], cle[6]) for cle in cles} == {
+            ("chambre", "chambre_id", "id", "CASCADE"),
+            ("chambre_virtuelle", "chambre_virtuelle_id", "id", "CASCADE"),
+        }
+        assert connexion.exec_driver_sql("PRAGMA foreign_key_check").all() == []

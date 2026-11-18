@@ -5,7 +5,6 @@ from datetime import date
 from nicegui import app, run, ui
 
 from ma_receptionniste.auth import logout_user
-from ma_receptionniste.consultations import options_clients
 from ma_receptionniste.pages.theme import date_longue
 from ma_receptionniste.saisie import creer_reservation
 
@@ -28,6 +27,7 @@ def _entrees() -> tuple[tuple[str | None, str, str, str], ...]:
     return (
         ("/dashboard", "Dashboard", "dashboard", "/dashboard"),
         ("/", "Planning", "calendar_month", "/"),
+        ("/disponibilites", "Disponibilités", "event_available", "/disponibilites"),
         ("/reservations", "Réservations", "book_online", "/reservations"),
         (
             f"/reservations/{ouverte}" if ouverte else None,
@@ -36,6 +36,7 @@ def _entrees() -> tuple[tuple[str | None, str, str, str], ...]:
             ACTIF_DETAIL,
         ),
         ("/clients", "Clients", "people", "/clients"),
+        ("/produits", "Produits", "inventory_2", "/produits"),
         (CHEMIN_PARAMETRES, "Paramètres", "settings", CHEMIN_PARAMETRES),
     )
 
@@ -46,13 +47,12 @@ def page(actif: str, titre: str) -> Iterator[None]:
     ui.page_title(f"{titre} · Ma Réceptionniste")
     ui.query("body").classes("bg-fond")
     _menu(actif)
-    ouvrir_dialogue = _dialogue_nouvelle_reservation()
     with ui.column().classes("w-full max-w-[1400px] mx-auto px-6 py-4 gap-4"):
         with ui.row().classes("w-full items-center justify-between no-wrap"):
             ui.label(titre).classes("text-xl font-semibold")
             with ui.row().classes("items-center gap-4 no-wrap"):
                 ui.label(date_longue(date.today())).classes("text-sm text-ardoise first-letter:uppercase")
-                ui.button("Nouvelle réservation", icon="add", on_click=ouvrir_dialogue)
+                ui.button("Nouvelle réservation", icon="add", on_click=nouvelle_reservation)
         yield
 
 
@@ -110,37 +110,11 @@ def _entree_menu(cible: str | None, libelle: str, icone: str, *, courant: bool) 
         ui.label(libelle)
 
 
-def _dialogue_nouvelle_reservation():
-    with ui.dialog() as dialogue, ui.card().classes("w-[26rem] gap-4"):
-        ui.label("Nouvelle réservation").classes("text-base font-semibold")
-        client = ui.select({}, label="Client", with_input=True).classes("w-full")
-        with ui.row().classes("w-full items-center justify-between"):
-            ui.link("Nouveau client", "/clients").classes("text-sm text-primary no-underline hover:underline")
-            with ui.row().classes("gap-2"):
-                ui.button("Annuler", on_click=dialogue.close).props("flat color=ardoise")
-                bouton_creer = ui.button("Créer et ouvrir la fiche")
-
-    async def creer() -> None:
-        if client.value is None:
-            ui.notify("Choisissez un client", type="warning")
-            return
-        await ouvrir_nouvelle_reservation(client.value)
-
-    bouton_creer.on_click(creer)
-
-    async def ouvrir() -> None:
-        options = await run.io_bound(options_clients)
-        if not options:
-            ui.notify("Ajoutez d'abord un client", type="warning")
-            ui.navigate.to("/clients")
-            return
-        client.set_options(options, value=next(iter(options)))
-        dialogue.open()
-
-    return ouvrir
+async def nouvelle_reservation() -> None:
+    await ouvrir_nouvelle_reservation()
 
 
-async def ouvrir_nouvelle_reservation(client_id: int) -> None:
+async def ouvrir_nouvelle_reservation(client_id: int | None = None) -> None:
     reservation_id = await run.io_bound(creer_reservation, client_id)
     ui.navigate.to(f"/reservations/{reservation_id}")
 

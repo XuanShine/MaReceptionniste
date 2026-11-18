@@ -9,7 +9,9 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "nicegui>=3.18.0",
+    "python-odt-template[jinja]==0.5.1",
     "sqlmodel>=0.0.48",
+    "wubook",
 ]
 
 [project.scripts]
@@ -39,3 +41,6 @@ addopts = "-p nicegui.testing.user_plugin"
 main_file = "main.py"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.uv.sources]
+wubook = { git = "https://github.com/XuanShine/wubook" }

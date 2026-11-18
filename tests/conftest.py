@@ -12,6 +12,7 @@ from sqlmodel import create_engine
 _DOSSIER = tempfile.mkdtemp(prefix="ma-receptionniste-tests-")
 atexit.register(shutil.rmtree, _DOSSIER, ignore_errors=True)
 os.environ["DATABASE_URL"] = f"sqlite:///{_DOSSIER}/app.db"
+os.environ["FACTURES_DIR"] = f"{_DOSSIER}/factures"
 
 from ma_receptionniste import db  # noqa: E402
 
@@ -27,4 +28,5 @@ def base(monkeypatch: pytest.MonkeyPatch):
 
     db.create_db_and_tables(engine)
     monkeypatch.setattr(db, "engine", engine)
+    monkeypatch.setenv("FACTURES_DIR", tempfile.mkdtemp(dir=_DOSSIER))
     return engine

@@ -167,12 +167,50 @@ RESERVATIONS = [
 def main() -> None:
     create_db_and_tables()
     aujourd_hui = date.today()
+    _assurer_identite()
     user_id = _reception()
     chambres = {nom: _chambre(nom, position, *infos) for position, (nom, infos) in enumerate(CHAMBRES.items(), 1)}
     for donnees in RESERVATIONS:
         _reservation(donnees, chambres, user_id, aujourd_hui)
     print(f"Base prête : {len(chambres)} chambres, {len(RESERVATIONS)} réservations.")
     print(f"Connexion : {EMAIL} / {MOT_DE_PASSE}")
+
+
+def _assurer_identite() -> None:
+    from ma_receptionniste.facturation import IdentiteFacturation, enregistrer_identite, lire_identite
+    from ma_receptionniste.models import FormeJuridique, RegimeTVA
+
+    if lire_identite().siren:
+        return
+    enregistrer_identite(
+        IdentiteFacturation(
+            nom_commercial="Hôtel Panorama",
+            denomination="Panorama SAS",
+            forme_juridique=FormeJuridique.sas,
+            capital_centimes=1_000_000,
+            adresse_siege="1 quai du Port\n29200 Brest",
+            adresse_facturation=None,
+            siren="123456789",
+            siret="12345678900012",
+            immatriculation="RCS Brest",
+            numero_tva="FR12123456789",
+            regime_tva=RegimeTVA.assujetti,
+            taux_hebergement_pour_mille=100,
+            delai_paiement_jours=0,
+            conditions_paiement=None,
+            escompte=None,
+            penalites=None,
+        )
+    )
+
+
+def _adresse_si_absente(client_id: int) -> None:
+    with get_session() as session:
+        client = session.get(Client, client_id)
+        if client is not None and not client.adresse:
+            client.adresse = "1 quai du Port, 29200 Brest"
+            session.add(client)
+            session.commit()
 
 
 def _reception() -> int:
@@ -242,6 +280,7 @@ def _reservation(donnees: dict, chambres: dict[str, int], user_id: int, aujourd_
         if not _existe(Historique, reservation_id, Historique.description == note):
             ajouter_note(reservation_id, user_id, note)
     if donnees.get("facturer"):
+        _adresse_si_absente(client_id)
         facturer(reservation_id, user_id)
     if donnees.get("annuler"):
         annuler_reservation(reservation_id, user_id)

@@ -44,6 +44,7 @@ def create_db_and_tables(engine: Engine = engine) -> None:
     SQLModel.metadata.create_all(engine)
     for colonne in ajouter_colonnes_manquantes(engine):
         logger.info("Colonne ajoutée : %s", colonne)
+    _preparer_facturation(engine)
 
 
 def ajouter_colonnes_manquantes(engine: Engine) -> list[str]:
@@ -78,6 +79,9 @@ def ajouter_colonnes_manquantes(engine: Engine) -> list[str]:
         _remplir_libelle_depuis_name(connexion)
         _repartir_les_types_de_chambre(connexion)
         _indexer_libelle(connexion)
+        _ajouter_champs_type_chambre(connexion, ajoutees)
+        _archiver_anciennes_cellules_virtuelles(connexion)
+        _retirer_tarif_bb(connexion)
         _indexer_les_liens_chambre(connexion)
 
     _executer_en_transaction(engine, _appliquer)
@@ -152,6 +156,93 @@ def _indexer_libelle(connexion) -> None:
     connexion.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS uq_type_chambre_libelle ON type_chambre(libelle)")
 
 
+def _ajouter_champs_type_chambre(connexion, ajoutees: list[str]) -> None:
+    if not _table_existe(connexion, "type_chambre"):
+        return
+    if not _a_colonne(connexion, "type_chambre", "wubook_id"):
+        connexion.exec_driver_sql("ALTER TABLE type_chambre ADD COLUMN wubook_id INTEGER")
+        ajoutees.append("type_chambre.wubook_id")
+    if not _a_colonne(connexion, "type_chambre", "description"):
+        connexion.exec_driver_sql("ALTER TABLE type_chambre ADD COLUMN description VARCHAR NOT NULL DEFAULT ''")
+        ajoutees.append("type_chambre.description")
+    if not _a_colonne(connexion, "type_chambre", "disponibilite"):
+        connexion.exec_driver_sql("ALTER TABLE type_chambre ADD COLUMN disponibilite INTEGER NOT NULL DEFAULT 0")
+        ajoutees.append("type_chambre.disponibilite")
+        if _a_colonne(connexion, "type_chambre", "availability"):
+            connexion.exec_driver_sql(
+                "UPDATE type_chambre SET disponibilite = availability WHERE availability IS NOT NULL"
+            )
+    if not _a_colonne(connexion, "type_chambre", "nom_raccourci"):
+        connexion.exec_driver_sql("ALTER TABLE type_chambre ADD COLUMN nom_raccourci VARCHAR(4)")
+        ajoutees.append("type_chambre.nom_raccourci")
+        if _a_colonne(connexion, "type_chambre", "shortname"):
+            connexion.exec_driver_sql(
+                "UPDATE type_chambre SET nom_raccourci = trim(shortname) "
+                "WHERE shortname IS NOT NULL AND trim(shortname) != ''"
+            )
+    if not _a_colonne(connexion, "type_chambre", "prix_defaut"):
+        connexion.exec_driver_sql("ALTER TABLE type_chambre ADD COLUMN prix_defaut FLOAT NOT NULL DEFAULT 0")
+        ajoutees.append("type_chambre.prix_defaut")
+        if _a_colonne(connexion, "type_chambre", "price"):
+            connexion.exec_driver_sql("UPDATE type_chambre SET prix_defaut = price WHERE price IS NOT NULL")
+    if not _a_colonne(connexion, "type_chambre", "prix_mini"):
+        connexion.exec_driver_sql("ALTER TABLE type_chambre ADD COLUMN prix_mini FLOAT NOT NULL DEFAULT 0")
+        ajoutees.append("type_chambre.prix_mini")
+        if _a_colonne(connexion, "type_chambre", "min_price"):
+            connexion.exec_driver_sql("UPDATE type_chambre SET prix_mini = min_price WHERE min_price IS NOT NULL")
+    if not _a_colonne(connexion, "type_chambre", "channel_manager_uniquement"):
+        connexion.exec_driver_sql(
+            "ALTER TABLE type_chambre ADD COLUMN channel_manager_uniquement BOOLEAN NOT NULL DEFAULT 0"
+        )
+        ajoutees.append("type_chambre.channel_manager_uniquement")
+        if _a_colonne(connexion, "type_chambre", "woodoo"):
+            connexion.exec_driver_sql(
+                "UPDATE type_chambre SET channel_manager_uniquement = woodoo WHERE woodoo IS NOT NULL"
+            )
+    _indexer_nom_raccourci(connexion)
+
+
+def _indexer_nom_raccourci(connexion) -> None:
+    if not _a_colonne(connexion, "type_chambre", "nom_raccourci"):
+        return
+    doublon = connexion.exec_driver_sql(
+        "SELECT nom_raccourci FROM type_chambre WHERE nom_raccourci IS NOT NULL "
+        "GROUP BY nom_raccourci HAVING COUNT(*) > 1"
+    ).first()
+    if doublon is not None:
+        raise CatalogueIllisible("Plusieurs types portent le même nom raccourci")
+    trop_long = connexion.exec_driver_sql(
+        "SELECT nom_raccourci FROM type_chambre WHERE nom_raccourci IS NOT NULL AND length(nom_raccourci) > 4"
+    ).first()
+    if trop_long is not None:
+        raise CatalogueIllisible("Un nom raccourci dépasse 4 caractères")
+    connexion.exec_driver_sql(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_type_chambre_nom_raccourci ON type_chambre(nom_raccourci)"
+    )
+
+
+def _archiver_anciennes_cellules_virtuelles(connexion) -> None:
+    # Ces cellules portent des formules, pas les prix du modèle ChambreVirtuelle.
+    # Les archives gardent leurs données sans retenir les types par une clé étrangère.
+    if _table_existe(connexion, "cellule_virtuelle"):
+        connexion.exec_driver_sql(
+            "CREATE TABLE archive_cellule_virtuelle AS "
+            "SELECT cellule.*, type_chambre.wubook_id AS type_chambre_wubook_id, "
+            "type_chambre.libelle AS type_chambre_libelle "
+            "FROM cellule_virtuelle AS cellule "
+            "LEFT JOIN type_chambre ON type_chambre.id = cellule.type_chambre_id"
+        )
+        connexion.exec_driver_sql("DROP TABLE cellule_virtuelle")
+    if _table_existe(connexion, "option_virtuelle"):
+        connexion.exec_driver_sql("CREATE TABLE archive_option_virtuelle AS SELECT * FROM option_virtuelle")
+        connexion.exec_driver_sql("DROP TABLE option_virtuelle")
+
+
+def _retirer_tarif_bb(connexion) -> None:
+    if _table_existe(connexion, "type_chambre") and _a_colonne(connexion, "type_chambre", "tarif_bb"):
+        connexion.exec_driver_sql("ALTER TABLE type_chambre DROP COLUMN tarif_bb")
+
+
 def _indexer_les_liens_chambre(connexion) -> None:
     for nom in ("type_chambre_id", "occupation_chambre_id"):
         if _a_colonne(connexion, "chambre", nom):
@@ -183,6 +274,33 @@ def _reprendre_valeurs_anciennes(connexion, ajoutees: set[str]) -> None:
         connexion.exec_driver_sql("UPDATE reglement SET mode = 'carte' WHERE mode = 'CB'")
     if "reglement.date" in ajoutees and _a_colonne(connexion, "reglement", "jour"):
         connexion.exec_driver_sql("UPDATE reglement SET date = date(jour) || ' 00:00:00' WHERE jour IS NOT NULL")
+
+
+def _preparer_facturation(engine: Engine) -> None:
+    """Pose les index de facture et initialise le compteur après les numéros déjà attribués, sans les renuméroter."""
+
+    def _appliquer(connexion) -> None:
+        if not _table_existe(connexion, "facture") or not _table_existe(connexion, "compteur_facture"):
+            return
+        connexion.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_facture_courante ON facture (reservation_id) WHERE courante = 1"
+        )
+        connexion.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_facture_remplace "
+            "ON facture (remplace_id) WHERE remplace_id IS NOT NULL"
+        )
+        plancher = (
+            "COALESCE((SELECT MAX(numero_facture) FROM reservation), 0)"
+            if _a_colonne(connexion, "reservation", "numero_facture")
+            else "0"
+        )
+        connexion.exec_driver_sql(
+            "INSERT INTO compteur_facture (id, dernier_numero) "
+            f"SELECT 1, MAX(COALESCE((SELECT MAX(numero) FROM facture), 0), {plancher}) "
+            "WHERE NOT EXISTS (SELECT 1 FROM compteur_facture WHERE id = 1)"
+        )
+
+    _executer_en_transaction(engine, _appliquer)
 
 
 def _retirer_colonnes_remplacees(connexion) -> None:

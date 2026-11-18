@@ -5,6 +5,7 @@ Application web construite avec [NiceGUI](https://nicegui.io) et [SQLModel](http
 ## Prérequis
 
 - [uv](https://docs.astral.sh/uv/)
+- LibreOffice, pour convertir le modèle de facture en PDF
 
 ## Installation
 
@@ -80,6 +81,29 @@ Toutes les pages sauf `/login` et `/register` exigent d'être connecté (voir `P
 
 Les montants sont stockés en centimes entiers et affichés par `format_euros` (`13764` donne `137,64 €`).
 
+## Import des types de chambres Wubook
+
+Définissez `WUBOOK_TOKEN` et `WUBOOK_LCODE` dans l'environnement (ou dans un fichier `.env`, chargé par le
+client Wubook), puis ouvrez **Paramètres → Types de chambre → Mettre à jour les types de chambres de Wubook**.
+
+Après confirmation, le catalogue local est remplacé par `HandlingRooms.fetch_rooms()` :
+les chambres standard deviennent des types de chambres, et les chambres virtuelles sont rattachées via `subroom`
+(pas via `anchorate`, qui est le parent tarifaire). Les identifiants Wubook, noms/raccourcis, prix par défaut,
+prix minimum et indicateurs Channel Manager des types sont importés.
+
+Les chambres physiques et leurs séjours ne sont pas supprimés. Les affectations aux types sont conservées
+par `wubook_id` ; celles des types disparus ou sans identifiant Wubook sont retirées.
+Un catalogue Wubook vide vide aussi le catalogue local. Un échec de récupération, de validation ou d'insertion
+ne modifie aucune donnée locale. Aucun changement n'est envoyé à Wubook.
+La création manuelle de types n'est plus proposée dans l'interface.
+
 ## Évolution du schéma
 
 Au démarrage, `create_db_and_tables` crée les tables absentes avec `SQLModel.metadata.create_all`. Il appelle ensuite `ajouter_colonnes_manquantes`, qui ajoute par `ALTER TABLE … ADD COLUMN` les colonnes du modèle absentes d'une table existante. Une nouvelle colonne doit donc être nullable ou avoir un `server_default`. Sinon le démarrage s'arrête sur `ColonneNonAjoutable` avant toute modification. Les renommages, les suppressions et les changements de type de colonne ne sont pas gérés. Ils demanderont Alembic.
+
+Exception explicitement prise en charge : les anciennes tables `cellule_virtuelle` et `option_virtuelle`
+sont copiées dans `archive_cellule_virtuelle` et `archive_option_virtuelle`, puis retirées dans la même
+transaction. Les archives conservent toutes les lignes et formules, sans clés étrangères qui bloqueraient
+le remplacement des types de chambres. L'archive des cellules conserve aussi le `wubook_id` et le libellé
+du type au moment de la migration. Ces formules ne sont pas converties en prix ni en chambres virtuelles actives.
+La migration est idempotente ; un conflit de nom d'archive annule la transaction sans écraser de données.

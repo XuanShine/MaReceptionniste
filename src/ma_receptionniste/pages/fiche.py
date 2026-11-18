@@ -1,42 +1,54 @@
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from nicegui import app, run, ui
+from nicegui import app, background_tasks, run, ui
 
 from ma_receptionniste.consultations import (
     MODE_REGLEMENT_LABEL,
     STATUT_SEJOUR,
     fiche_sejour,
+    libelle_client,
+    lire_client,
     lister_chambres,
+    lister_produits,
     options_chambres,
+    rechercher_clients,
 )
 from ma_receptionniste.facturation import Totaux, centimes, format_euros, montant_ligne, nuits, taxe_sejour
 from ma_receptionniste.models import Client, ModeReglement, Reservation, StatutReservation
 from ma_receptionniste.pages.clients import PAYS_COURANTS
+from ma_receptionniste.pages.composants.facture import enregistrer_route_pdf, ouvrir_facturation
 from ma_receptionniste.pages.layout import ACTIF_DETAIL, badge, etat_vide, fermer_reservation, ouvrir_reservation, page
 from ma_receptionniste.pages.theme import date_courte, date_heure, heure_locale
 from ma_receptionniste.saisie import (
+    CHAMPS_CLIENT,
     CHAMPS_FICHE,
-    FacturationImpossible,
+    NOM_CLIENT_PASSAGE,
     FicheInvalide,
-    ajouter_consommation,
+    ProduitInvalide,
+    ajouter_consommation_produit,
     ajouter_note,
     ajouter_reglement,
     ajouter_sejour,
     annuler_reservation,
     champs_modifies,
+    creer_client,
     enregistrer_fiche,
-    facturer,
+    modifier_consommation,
     modifier_sejour,
     reprendre_reservation,
     supprimer_sejour,
 )
 from ma_receptionniste.sejours import ChambreOccupee, SejourInvalide
 
+enregistrer_route_pdf()
+
+logger = logging.getLogger(__name__)
+
 PARTENAIRES = ["Booking.com", "Expedia", "Airbnb", "Direct", "Téléphone", "Site web", "Agence de voyage"]
-CONSOMMATIONS_COURANTES = ["Petit-déjeuner", "Parking", "Bar", "Mini-bar", "Restaurant", "Blanchisserie"]
-ONGLETS_TEXTE = ("notes", "facturation")
+ONGLETS_TEXTE = ("notes", "notes_client", "facturation")
 ONGLETS_COMPTES = {
     "reservations": "Réservations",
     "consommations": "Consommations",
@@ -142,29 +154,71 @@ async def fiche(reservation_id: int) -> None:
     user_id = app.storage.user.get("user_id")
     enregistre = _champs(donnees)
     valeurs = {cle: _valeur_affichee(valeur) for cle, valeur in enregistre.items()}
+    client_id = donnees["client"]["id"]
+    client_nom = donnees["client"]["nom"]
+    enregistre_client_id = client_id
+    champs: dict[str, ui.element] = {}
+    ouvrir_clients: list[Callable[[str], None]] = []
     brouillon: BrouillonLigne | None = None
     ajout_en_cours = False
     enregistrement_en_cours = False
+    vente_en_cours = False
+    produits_vente = await run.io_bound(lister_produits, actifs_seulement=True) or []
+
+    def passage_selectionne() -> bool:
+        return client_nom == NOM_CLIENT_PASSAGE
+
+    def verrouiller_client() -> None:
+        passage = passage_selectionne()
+        for cle in CHAMPS_CLIENT:
+            champ = champs.get(cle)
+            if champ is not None:
+                champ.set_enabled(not passage)
+
+    def appliquer_client(client: dict) -> None:
+        nonlocal client_id, client_nom
+        client_id = client["id"]
+        client_nom = client["nom"]
+        for cle, source in (
+            ("nom", "nom"),
+            ("pays", "pays"),
+            ("telephone", "telephone"),
+            ("email", "email"),
+            ("adresse", "adresse"),
+            ("notes_client", "notes"),
+        ):
+            champs[cle].set_value(_valeur_affichee(client.get(source)))
+        champs["identite"].set_text(_texte_client(client_nom, client_id))
+        verrouiller_client()
+
+    def fiche_modifiee() -> bool:
+        return bool(champs_modifies(enregistre, valeurs)) or client_id != enregistre_client_id
 
     async def recharger() -> None:
         nonlocal donnees
         donnees = await run.io_bound(fiche_sejour, reservation_id)
         for section in (entete, infos, consommations, reglements, historique, totaux, actions):
-            section.refresh()
+            await section.refresh()
+        verrouiller_client()
         dessiner_persiste()
         compter()
         montant_reglement.value = _euros(max(donnees["totaux"].solde, 0))
 
     async def enregistrer_haut() -> list[str] | None:
-        nonlocal enregistre
+        nonlocal enregistre, client_id, client_nom, enregistre_client_id
         try:
-            libelles = await run.io_bound(enregistrer_fiche, reservation_id, user_id, dict(valeurs))
+            libelles = await run.io_bound(enregistrer_fiche, reservation_id, user_id, dict(valeurs), client_id)
         except FicheInvalide as erreur:
             ui.notify(str(erreur), type="warning")
             return None
         if libelles:
             await recharger()
             enregistre = _champs(donnees)
+            client_id = donnees["client"]["id"]
+            client_nom = donnees["client"]["nom"]
+            enregistre_client_id = client_id
+            champs["identite"].set_text(_texte_client(client_nom, client_id))
+            verrouiller_client()
         return libelles
 
     async def confirmer() -> None:
@@ -184,23 +238,13 @@ async def fiche(reservation_id: int) -> None:
         ui.navigate.to("/")
 
     async def abandonner() -> None:
-        if champs_modifies(enregistre, valeurs):
+        if fiche_modifiee():
             confirmation_abandon.open()
         else:
             await partir()
 
-    async def emettre_facture() -> None:
-        deja_emise = donnees["reservation"]["numero_facture"] is not None
-        try:
-            numero = await run.io_bound(facturer, reservation_id, user_id)
-        except FacturationImpossible as erreur:
-            ui.notify(str(erreur), type="warning")
-            return
-        await recharger()
-        if deja_emise:
-            ui.notify(f"La facture n° {numero} a déjà été émise")
-        else:
-            ui.notify(f"Facture n° {numero} émise", type="positive")
+    async def consulter_facture() -> None:
+        await ouvrir_facturation(reservation_id, user_id=user_id, apres=recharger)
 
     async def annuler() -> None:
         await run.io_bound(annuler_reservation, reservation_id, user_id)
@@ -219,23 +263,66 @@ async def fiche(reservation_id: int) -> None:
     async def modifier_ligne(ligne: dict) -> None:
         await ouvrir_ligne(ligne)
 
-    async def ajouter_une_consommation() -> None:
-        if not (libelle.value or "").strip() or prix_unitaire.value is None:
-            ui.notify("Indiquez le libellé et le prix unitaire", type="warning")
+    def proposer_prix(evenement) -> None:
+        try:
+            identifiant = int(evenement.value)
+        except (TypeError, ValueError):
+            prix_unitaire.set_value(None)
             return
-        await run.io_bound(
-            ajouter_consommation,
-            reservation_id,
-            libelle.value,
-            int(quantite.value or 1),
-            centimes(prix_unitaire.value),
-            user_id,
-        )
-        libelle.value = ""
-        quantite.value = 1
-        prix_unitaire.value = None
-        await recharger()
-        ui.notify("Consommation ajoutée", type="positive")
+        produit = next((item for item in produits_vente if item.id == identifiant), None)
+        prix_unitaire.set_value(None if produit is None else _euros(produit.prix_unitaire_centimes))
+
+    async def actualiser_produits() -> None:
+        nonlocal produits_vente
+        produits = await run.io_bound(lister_produits, actifs_seulement=True)
+        if produits is None:
+            return
+        produits_vente = produits
+        produit_choisi.set_options({produit.id: produit.nom for produit in produits_vente})
+
+    async def rafraichir_catalogue_consommations(evenement) -> None:
+        if evenement.value != "consommations" or vente_en_cours:
+            return
+        await actualiser_produits()
+
+    async def ajouter_une_consommation() -> None:
+        nonlocal vente_en_cours
+        if vente_en_cours:
+            return
+        if produit_choisi.value is None:
+            ui.notify("Choisissez un produit", type="warning")
+            return
+        quantite_saisie = _entier_positif(quantite.value)
+        if quantite_saisie is None:
+            ui.notify("La quantité doit être un entier supérieur à 0", type="warning")
+            return
+        prix_accepte = _prix_saisi(prix_unitaire.value)
+        if prix_accepte is None:
+            ui.notify("Indiquez le prix unitaire", type="warning")
+            return
+        vente_en_cours = True
+        bouton_consommation.disable()
+        try:
+            await run.io_bound(
+                ajouter_consommation_produit,
+                reservation_id,
+                int(produit_choisi.value),
+                quantite_saisie,
+                prix_accepte,
+                user_id,
+            )
+        except ProduitInvalide as erreur:
+            await actualiser_produits()
+            ui.notify(str(erreur), type="warning")
+        else:
+            produit_choisi.set_value(None)
+            quantite.set_value(1)
+            await actualiser_produits()
+            await recharger()
+            ui.notify("Consommation ajoutée", type="positive")
+        finally:
+            vente_en_cours = False
+            bouton_consommation.enable()
 
     async def ajouter_un_reglement() -> None:
         if not montant_reglement.value or montant_reglement.value <= 0:
@@ -262,24 +349,36 @@ async def fiche(reservation_id: int) -> None:
 
     @ui.refreshable
     def infos() -> None:
-        _infos(donnees, valeurs)
+        champs.update(_infos(donnees, valeurs, ouvrir_clients[0], client_nom, client_id, consulter_facture))
+
+    async def enregistrer_consommation(ligne: dict, quantite_saisie: int, prix_accepte: int, jour: date) -> bool:
+        nonlocal vente_en_cours
+        if vente_en_cours:
+            return False
+        vente_en_cours = True
+        bouton_consommation.disable()
+        rechargee = False
+        try:
+            modifie = await run.io_bound(
+                modifier_consommation, ligne["id"], quantite_saisie, prix_accepte, jour, user_id
+            )
+        except ProduitInvalide as erreur:
+            ui.notify(str(erreur), type="warning")
+            await recharger()
+            rechargee = True
+        else:
+            if modifie:
+                await recharger()
+                ui.notify("Consommation modifiée", type="positive")
+                rechargee = True
+        finally:
+            vente_en_cours = False
+            bouton_consommation.enable()
+        return rechargee
 
     @ui.refreshable
     def consommations() -> None:
-        _tableau(
-            COLONNES_CONSOMMATIONS,
-            [
-                [
-                    date_courte(heure_locale(consommation["date"])),
-                    consommation["libelle"],
-                    str(consommation["quantite"]),
-                    format_euros(consommation["prix_unitaire_centimes"]),
-                    format_euros(consommation["montant"]),
-                ]
-                for consommation in donnees["consommations"]
-            ],
-            "Aucune consommation.",
-        )
+        _tableau_consommations(donnees["consommations"], enregistrer_consommation, lambda: vente_en_cours)
 
     @ui.refreshable
     def reglements() -> None:
@@ -314,7 +413,7 @@ async def fiche(reservation_id: int) -> None:
     @ui.refreshable
     def actions() -> None:
         annulee = donnees["reservation"]["statut"] == StatutReservation.annulee
-        ui.button("Facturer", icon="receipt_long", on_click=emettre_facture).props("outline").set_enabled(not annulee)
+        ui.button("Facturer", icon="receipt_long", on_click=consulter_facture).props("outline").set_enabled(not annulee)
         ui.button("Annuler la réservation", icon="event_busy", on_click=confirmation_annulation.open).props(
             "outline color=negative"
         ).set_enabled(not annulee)
@@ -342,19 +441,22 @@ async def fiche(reservation_id: int) -> None:
             "Abandonner",
             partir,
         )
+        ouvrir_clients.append(_dialogue_clients(appliquer_client))
         with ui.card().props("flat bordered").classes("w-full rounded-lg p-0 gap-0"):
             entete()
             with ui.element("div").classes("w-full grid grid-cols-12 gap-6 px-6 py-5"):
                 with ui.column().classes("col-span-5 gap-0"):
                     infos()
                 with ui.column().classes("col-span-7 gap-0"):
-                    _onglets_contacts(valeurs)
+                    champs.update(_onglets_contacts(valeurs))
+            verrouiller_client()
 
             with ui.column().classes("w-full gap-0 border-t border-slate-200"):
                 with (
                     ui.tabs(value="reservations")
                     .props("dense align=left no-caps inline-label active-color=primary indicator-color=primary")
-                    .classes("w-full px-3 text-ardoise border-b border-slate-200") as onglets
+                    .classes("w-full px-3 text-ardoise border-b border-slate-200")
+                    .mark("onglets-fiche") as onglets
                 ):
                     onglets_comptes = {cle: ui.tab(cle) for cle in ONGLETS_COMPTES}
                 compter()
@@ -455,10 +557,26 @@ async def fiche(reservation_id: int) -> None:
                     with ui.tab_panel("consommations").classes("p-0"):
                         consommations()
                         with _barre_saisie():
-                            libelle = ui.input("Libellé", autocomplete=CONSOMMATIONS_COURANTES).classes("w-64")
-                            quantite = ui.number("Qté", value=1, min=1, precision=0, format="%d").classes("w-24")
-                            prix_unitaire = _champ_euros("PU TTC").classes("w-36")
-                            ui.button("Ajouter", icon="add", on_click=ajouter_une_consommation)
+                            produit_choisi = (
+                                ui.select(
+                                    {produit.id: produit.nom for produit in produits_vente},
+                                    label="Produit",
+                                    with_input=True,
+                                )
+                                .classes("w-64")
+                                .mark("produit-consommation")
+                            )
+                            quantite = (
+                                ui.number("Qté", value=1, min=1, precision=0, format="%d")
+                                .classes("w-24")
+                                .mark("quantite-consommation")
+                            )
+                            prix_unitaire = _champ_euros("PU TTC").classes("w-36").mark("prix-consommation")
+                            produit_choisi.on_value_change(proposer_prix)
+                            bouton_consommation = ui.button(
+                                "Ajouter", icon="add", on_click=ajouter_une_consommation
+                            ).mark("ajouter-consommation")
+                        onglets.on_value_change(rafraichir_catalogue_consommations)
                     with ui.tab_panel("reglements").classes("p-0"):
                         totaux()
                         reglements()
@@ -521,19 +639,51 @@ def _entete(fiche: dict, retour: Callable[[], Awaitable[None]]) -> None:
         ui.button("Planning", icon="arrow_back", on_click=retour).props("flat color=ardoise")
 
 
-def _infos(fiche: dict, valeurs: dict) -> None:
-    client, reservation = fiche["client"], fiche["reservation"]
+def _texte_client(nom: str, identifiant: int) -> str:
+    return f"{nom} · n° {identifiant}"
+
+
+def _infos(
+    fiche: dict,
+    valeurs: dict,
+    ouvrir_client: Callable[[str], None],
+    nom_client: str,
+    identifiant: int,
+    consulter_facture: Callable[[], None],
+) -> dict[str, ui.element]:
+    reservation = fiche["reservation"]
     with ui.grid().classes("w-full gap-x-4 gap-y-2 items-center").style("grid-template-columns: 7rem 1fr"):
         _libelle("Nom")
-        ui.input(placeholder="Nom").bind_value(valeurs, "nom")
+        nom = ui.input(placeholder="Nom").bind_value(valeurs, "nom").mark("nom-client")
         _libelle(CHAMPS_FICHE["nom_occupant"][1])
-        ui.input(placeholder="Nom sur le planning").bind_value(valeurs, "nom_occupant")
+        with ui.row().classes("w-full no-wrap items-center gap-1"):
+            ui.input(placeholder="Nom sur le planning").bind_value(valeurs, "nom_occupant").classes("flex-1").mark(
+                "occupant-reservation"
+            )
+            loupe = (
+                ui.button(
+                    icon="search",
+                    on_click=lambda: ouvrir_client((valeurs.get("nom_occupant") or "").strip()),
+                )
+                .props("flat round dense")
+                .mark("loupe-occupant")
+            )
+            loupe.tooltip("Rechercher ce nom")
         _libelle("Client")
-        _lecture(f"{client['nom_complet']} · n° {client['id']}")
+        with (
+            ui.row()
+            .classes(
+                "h-10 w-full items-center gap-2 px-3 rounded bg-slate-50 cursor-pointer hover:bg-primary-pale no-wrap"
+            )
+            .on("click", lambda: ouvrir_client(""))
+            .mark("client-sejour")
+        ):
+            identite = ui.label(_texte_client(nom_client, identifiant)).classes("text-sm text-slate-700 truncate")
+            ui.icon("expand_more", size="1.1rem").classes("text-ardoise")
         _libelle(CHAMPS_FICHE["pays"][1])
-        ui.input(autocomplete=PAYS_COURANTS).bind_value(valeurs, "pays")
+        pays = ui.input(autocomplete=PAYS_COURANTS).bind_value(valeurs, "pays").mark("pays-client")
         _libelle(CHAMPS_FICHE["partenaire"][1])
-        ui.input(autocomplete=PARTENAIRES).bind_value(valeurs, "partenaire")
+        ui.input(autocomplete=PARTENAIRES).bind_value(valeurs, "partenaire").mark("partenaire-reservation")
         _libelle("Statut")
         if reservation["statut"] == StatutReservation.annulee:
             badge(STATUT_SEJOUR[StatutReservation.annulee].libelle, "negative")
@@ -544,10 +694,16 @@ def _infos(fiche: dict, valeurs: dict) -> None:
         _libelle("Date facture")
         _lecture(date_courte(reservation["date_facture"]) or "—")
         _libelle("N° facture")
-        _lecture(str(reservation["numero_facture"] or "—"))
+        if reservation["numero_facture"]:
+            ui.button(str(reservation["numero_facture"]), on_click=consulter_facture).props(
+                "flat dense no-caps color=primary"
+            ).mark("numero-facture")
+        else:
+            _lecture("—")
+    return {"nom": nom, "pays": pays, "identite": identite}
 
 
-def _onglets_contacts(valeurs: dict) -> None:
+def _onglets_contacts(valeurs: dict) -> dict[str, ui.element]:
     ouvert = "notes" if valeurs["notes"] else "contacts"
     with ui.column().classes("w-full gap-0 border border-slate-200 rounded-lg overflow-hidden"):
         with (
@@ -560,17 +716,25 @@ def _onglets_contacts(valeurs: dict) -> None:
         with ui.tab_panels(onglets, value=ouvert, animated=False).classes("w-full"):
             with ui.tab_panel("contacts").classes("p-4"):
                 with ui.grid().classes("w-full gap-x-4 gap-y-2 items-start").style("grid-template-columns: 6rem 1fr"):
-                    for cle in ("telephone", "email"):
-                        _libelle(CHAMPS_FICHE[cle][1])
-                        ui.input().bind_value(valeurs, cle)
+                    _libelle(CHAMPS_FICHE["telephone"][1])
+                    telephone = ui.input().bind_value(valeurs, "telephone").mark("telephone-client")
+                    _libelle(CHAMPS_FICHE["email"][1])
+                    email = ui.input().bind_value(valeurs, "email").mark("email-client")
                     _libelle(CHAMPS_FICHE["adresse"][1])
-                    ui.textarea().bind_value(valeurs, "adresse").props("rows=4")
+                    adresse = ui.textarea().bind_value(valeurs, "adresse").props("rows=4").mark("adresse-client")
+            zones: dict[str, ui.textarea] = {}
             for cle in ONGLETS_TEXTE:
                 with ui.tab_panel(cle).classes("p-3"):
-                    ui.textarea().bind_value(valeurs, cle).props("rows=12").classes("w-full").on_value_change(
-                        lambda evenement, onglet=pastilles[cle]: _pastille(onglet, evenement.value)
+                    zones[cle] = (
+                        ui.textarea()
+                        .bind_value(valeurs, cle)
+                        .props("rows=12")
+                        .classes("w-full")
+                        .on_value_change(lambda evenement, onglet=pastilles[cle]: _pastille(onglet, evenement.value))
                     )
                 _pastille(pastilles[cle], valeurs[cle])
+            zones["notes_client"].mark("notes-client")
+    return {"telephone": telephone, "email": email, "adresse": adresse, "notes_client": zones["notes_client"]}
 
 
 def _pastille(onglet: ui.tab, texte: str | None) -> None:
@@ -664,6 +828,100 @@ def _boutons_brouillon(
                 ui.button("Annuler", on_click=annuler).props("flat color=ardoise")
 
 
+def _tableau_consommations(
+    lignes: list[dict],
+    enregistrer: Callable[[dict, int, int, date], Awaitable[bool]],
+    occupee: Callable[[], bool],
+) -> None:
+    with ui.element("table").classes("w-full text-sm border-collapse"):
+        with ui.element("thead"), ui.element("tr"):
+            for titre, classes in COLONNES_CONSOMMATIONS:
+                _th(titre, classes)
+        with ui.element("tbody"):
+            if not lignes:
+                _rangee_vide("Aucune consommation.", len(COLONNES_CONSOMMATIONS))
+            for ligne in lignes:
+                _rangee_consommation(ligne, enregistrer, occupee)
+
+
+def _rangee_consommation(
+    ligne: dict,
+    enregistrer: Callable[[dict, int, int, date], Awaitable[bool]],
+    occupee: Callable[[], bool],
+) -> None:
+    identifiant = ligne["id"]
+    with ui.element("tr").mark(f"ligne-consommation-{identifiant}"):
+        with _cellule_saisie():
+            date_ligne = (
+                _champ_date("").props(PROPS_SAISIE).classes("w-36").mark(f"date-ligne-{identifiant}")
+            )
+            date_ligne.set_value(date_courte(heure_locale(ligne["date"])))
+        with ui.element("td").classes(f"{TD} {A_GAUCHE} align-middle"):
+            ui.label(ligne["libelle"]).mark(f"libelle-ligne-{identifiant}")
+        with _cellule_saisie():
+            quantite = (
+                ui.number(value=ligne["quantite"], min=1, precision=0, format="%d")
+                .props(f"{PROPS_SAISIE} input-class=text-right")
+                .classes("w-16")
+                .mark(f"quantite-ligne-{identifiant}")
+            )
+        with _cellule_saisie():
+            prix = (
+                _champ_euros("", _euros(ligne["prix_unitaire_centimes"]))
+                .props(f"{PROPS_SAISIE} input-class=text-right")
+                .classes("w-28")
+                .mark(f"prix-ligne-{identifiant}")
+            )
+        with ui.element("td").classes(f"{TD} {A_DROITE} align-middle font-semibold"):
+            montant = ui.label(format_euros(ligne["montant"])).mark(f"montant-ligne-{identifiant}")
+
+    def afficher_montant() -> None:
+        quantite_saisie = _entier_positif(quantite.value)
+        prix_accepte = _prix_saisi(prix.value)
+        montant.set_text(
+            "—" if quantite_saisie is None or prix_accepte is None else format_euros(quantite_saisie * prix_accepte)
+        )
+
+    async def memoriser(ignorer_date_incomplete: bool) -> None:
+        if occupee():
+            return
+        quantite_saisie = _entier_positif(quantite.value)
+        prix_accepte = _prix_saisi(prix.value)
+        jour = _lire_date(date_ligne.value)
+        if quantite_saisie is None:
+            ui.notify("La quantité doit être un entier supérieur à 0", type="warning")
+            return
+        if prix_accepte is None:
+            ui.notify("Indiquez le prix unitaire", type="warning")
+            return
+        if jour is None:
+            if ignorer_date_incomplete:
+                return
+            ui.notify("Indiquez la date", type="warning")
+            return
+        if (
+            quantite_saisie == ligne["quantite"]
+            and prix_accepte == ligne["prix_unitaire_centimes"]
+            and jour == heure_locale(ligne["date"]).date()
+        ):
+            return
+        for champ in (date_ligne, quantite, prix):
+            champ.disable()
+        if not await enregistrer(ligne, quantite_saisie, prix_accepte, jour):
+            for champ in (date_ligne, quantite, prix):
+                champ.enable()
+
+    async def sortir() -> None:
+        await memoriser(False)
+
+    async def saisir_date() -> None:
+        await memoriser(True)
+
+    quantite.on("blur", sortir).on("keydown.enter", sortir).on_value_change(lambda _: afficher_montant())
+    prix.on("blur", sortir).on("keydown.enter", sortir).on_value_change(lambda _: afficher_montant())
+    date_ligne.on("blur", sortir).on("keydown.enter", sortir).on_value_change(saisir_date)
+
+
 def _tableau(colonnes: tuple[tuple[str, str], ...], rangees: list[list[str]], vide: str) -> None:
     with ui.element("table").classes("w-full text-sm border-collapse"):
         with ui.element("thead"), ui.element("tr"):
@@ -733,6 +991,26 @@ def _champ_date(libelle: str) -> ui.date_input:
 
 def _euros(montant: int) -> float:
     return montant / 100
+
+
+def _prix_saisi(valeur: float | None) -> int | None:
+    if valeur is None:
+        return None
+    try:
+        return centimes(valeur)
+    except (ArithmeticError, ValueError):
+        return None
+
+
+def _entier_positif(valeur: object) -> int | None:
+    if isinstance(valeur, bool) or valeur is None:
+        return None
+    if isinstance(valeur, int):
+        return valeur if valeur > 0 else None
+    if isinstance(valeur, float) and valeur.is_integer():
+        entier = int(valeur)
+        return entier if entier > 0 else None
+    return None
 
 
 def _lire_date(texte: str | None) -> date | None:
@@ -846,6 +1124,96 @@ def _monter_brouillon(
     adultes.on_value_change(sur_champs)
     prix.on_value_change(sur_champs)
     return ligne
+
+
+def _dialogue_clients(appliquer: Callable[[dict], None]) -> Callable[[str], None]:
+    generation = 0
+    creation_en_cours = False
+
+    with ui.dialog() as dialogue, ui.card().classes("w-[32rem] gap-3 p-5"):
+        ui.label("Choisir un client").classes("text-base font-semibold")
+        with ui.row().classes("w-full items-center no-wrap gap-2"):
+            recherche = (
+                ui.input(placeholder="Rechercher un client")
+                .props("clearable autofocus")
+                .classes("flex-1")
+                .mark("recherche-client")
+            )
+            bouton_plus = ui.button("+").props("flat").classes("text-lg min-w-10 px-3")
+            bouton_plus.tooltip("Créer ce client")
+            bouton_plus.set_enabled(False)
+            bouton_plus.mark("creer-client")
+        liste = ui.column().classes("w-full gap-0 max-h-80 overflow-y-auto")
+
+    def autoriser() -> None:
+        bouton_plus.set_enabled(bool((recherche.value or "").strip()) and not creation_en_cours)
+
+    def choisir(client: dict) -> None:
+        dialogue.close()
+        appliquer(client)
+
+    def afficher(clients: list[dict]) -> None:
+        liste.clear()
+        with liste:
+            if not clients:
+                ui.label("Aucun client ne correspond").classes("text-sm text-ardoise px-1 py-2")
+                return
+            for client in clients:
+                (
+                    ui.button(libelle_client(client), on_click=lambda choisi=client: choisir(choisi))
+                    .props("flat align=left")
+                    .classes("w-full justify-start font-normal")
+                    .mark(f"resultat-client-{client['id']}")
+                )
+
+    async def rafraichir() -> None:
+        nonlocal generation
+        generation += 1
+        courant = generation
+        texte = recherche.value or ""
+        trouves = await run.io_bound(rechercher_clients, texte)
+        if courant != generation or liste.is_deleted:
+            return
+        afficher(trouves)
+        autoriser()
+
+    async def creer() -> None:
+        nonlocal creation_en_cours
+        nom = (recherche.value or "").strip()
+        if not nom or creation_en_cours:
+            return
+        creation_en_cours = True
+        bouton_plus.set_enabled(False)
+        try:
+            nouveau_id = await run.io_bound(creer_client, nom)
+            client = await run.io_bound(lire_client, nouveau_id)
+        except Exception:
+            logger.exception("Création du client impossible")
+            creation_en_cours = False
+            autoriser()
+            ui.notify("Le client n'a pas pu être créé", type="warning")
+            return
+        creation_en_cours = False
+        if client is None:
+            autoriser()
+            ui.notify("Le client n'a pas pu être créé", type="warning")
+            return
+        dialogue.close()
+        ui.notify("Client créé", type="positive")
+        appliquer(client)
+
+    def ouvrir(texte: str = "") -> None:
+        dialogue.open()
+        if (recherche.value or "") != texte:
+            recherche.set_value(texte)
+            return
+        autoriser()
+        background_tasks.create(rafraichir(), context=liste)
+
+    recherche.on_value_change(autoriser)
+    recherche.on_value_change(rafraichir)
+    bouton_plus.on_click(creer)
+    return ouvrir
 
 
 def _dialogue_ligne(

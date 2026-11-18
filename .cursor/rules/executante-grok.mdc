@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+---
+Tu es le développeur d’exécution. Applique strictement le plan d’architecture fourni.
+Écris tout le code complet, les migrations et les tests unitaires, et exécute-les jusqu’à ce qu’ils passent.
+Quand tu as terminé, produis un résumé technique de 10 lignes maximum listant les fichiers modifiés et les éventuels points de vigilance pour la revue de code.

@@ -2,9 +2,9 @@ from datetime import date
 
 from nicegui import run, ui
 
-from ma_receptionniste.consultations import STATUT_SEJOUR, lister_reservations, options_clients
+from ma_receptionniste.consultations import STATUT_SEJOUR, lister_reservations
 from ma_receptionniste.facturation import format_euros
-from ma_receptionniste.pages.layout import etat_vide, ouvrir_nouvelle_reservation, page
+from ma_receptionniste.pages.layout import etat_vide, nouvelle_reservation, page
 from ma_receptionniste.pages.theme import date_courte
 
 COLONNES = [
@@ -43,29 +43,16 @@ def _ligne_tableau(reservation: dict) -> dict:
 
 @ui.page("/reservations")
 async def reservations() -> None:
-    clients = await run.io_bound(options_clients)
     lignes = await run.io_bound(lister_reservations)
     # Les réservations sans séjour (juste créées) d'abord, puis de l'arrivée la plus lointaine à la plus ancienne.
     lignes.sort(key=lambda reservation: reservation["date_debut"] or date.max, reverse=True)
 
-    async def creer() -> None:
-        if client_id.value is None:
-            ui.notify("Choisissez un client", type="warning")
-            return
-        await ouvrir_nouvelle_reservation(client_id.value)
-
     with page("/reservations", "Réservations"):
         with ui.card().props("flat bordered").classes("w-full rounded-lg px-4 py-3"):
-            if not clients:
-                etat_vide(
-                    "person_add", "Ajoutez un client avant de créer une réservation.", "Ajouter un client", "/clients"
-                )
-            else:
-                with ui.row().classes("w-full items-center gap-3 no-wrap"):
-                    ui.icon("add_circle", size="1.25rem").classes("text-primary")
-                    ui.label("Nouvelle réservation pour").classes("text-sm text-ardoise whitespace-nowrap")
-                    client_id = ui.select(clients, value=next(iter(clients)), with_input=True).classes("w-80")
-                    ui.button("Créer", on_click=creer)
+            with ui.row().classes("w-full items-center gap-3 no-wrap"):
+                ui.icon("add_circle", size="1.25rem").classes("text-primary")
+                ui.label("Nouvelle réservation").classes("text-sm text-ardoise whitespace-nowrap")
+                ui.button("Créer", on_click=nouvelle_reservation).mark("creer-reservation")
         with ui.card().props("flat bordered").classes("w-full rounded-lg p-0 gap-0"):
             with ui.row().classes("w-full items-center justify-between px-4 py-3 border-b border-slate-200"):
                 ui.label(f"{len(lignes)} réservation{'s' if len(lignes) > 1 else ''}").classes("text-sm text-ardoise")

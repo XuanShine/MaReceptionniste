@@ -72,6 +72,18 @@ def test_creer_et_lister_valide_trie_et_filtre(base) -> None:
     assert lister_produits()[0].actif is False
 
 
+def test_le_produit_ponctuel_est_conserve_quand_on_modifie_le_prix(base) -> None:
+    identifiant = creer_produit("Petit-déjeuner", 1400, ponctuel=True)
+
+    assert lister_produits()[0].ponctuel is True
+    assert modifier_produit(identifiant, "Petit-déjeuner", 1500)
+    produit = lister_produits()[0]
+    assert (produit.prix_unitaire_centimes, produit.ponctuel) == (1500, True)
+    assert modifier_produit(identifiant, "Petit-déjeuner", 1500, ponctuel=False)
+    assert lister_produits()[0].ponctuel is False
+    assert not modifier_produit(identifiant, "Petit-déjeuner", 1500, ponctuel=False)
+
+
 def test_le_taux_de_tva_est_enregistre_et_un_taux_inconnu_est_refuse(base) -> None:
     with pytest.raises(ProduitInvalide, match="pas reconnu"):
         creer_produit("Café", 100, taux_tva_pour_mille=12)

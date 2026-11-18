@@ -13,7 +13,7 @@ from ma_receptionniste.saisie import (
     modifier_produit,
 )
 
-_COLONNES = "grid-template-columns: minmax(12rem, 1fr) 8rem 6rem 7rem 14rem;"
+_COLONNES = "grid-template-columns: minmax(12rem, 1fr) 8rem 6rem 6rem 7rem 14rem;"
 _ENTETE = "px-4 py-2 text-xs font-semibold text-ardoise"
 _CELLULE = "px-4 h-11 flex items-center"
 _ESPACE_FINE = "\u202f"
@@ -95,6 +95,7 @@ async def produits() -> None:
                 ("Nom", ""),
                 ("Prix TTC", " justify-end"),
                 ("TVA", " justify-end"),
+                ("Ponctuel", ""),
                 ("État", ""),
                 ("", ""),
             ):
@@ -117,6 +118,7 @@ async def produits() -> None:
             ui.label(_libelle_taux(produit.taux_tva_pour_mille)).classes(f"{_CELLULE} justify-end tabular-nums").mark(
                 f"tva-produit-{produit.id}"
             )
+            ui.label("Oui" if produit.ponctuel else "—").classes(_CELLULE).mark(f"ponctuel-etat-{produit.id}")
             with ui.element("div").classes(_CELLULE):
                 if produit.actif:
                     badge("Actif", "positive")
@@ -150,6 +152,7 @@ async def produits() -> None:
         nom_edition.set_value(produit.nom)
         prix_edition.set_value(_euros(produit.prix_unitaire_centimes))
         tva_edition.set_value(produit.taux_tva_pour_mille)
+        ponctuel_edition.set_value(bool(produit.ponctuel))
         dialogue.open()
 
     async def ajouter() -> None:
@@ -170,13 +173,16 @@ async def produits() -> None:
         ecriture = True
         bouton_creer.disable()
         try:
-            await run.io_bound(creer_produit, nom.value, montant, taux_tva_pour_mille=taux)
+            await run.io_bound(
+                creer_produit, nom.value, montant, taux_tva_pour_mille=taux, ponctuel=bool(ponctuel.value)
+            )
         except ProduitInvalide as erreur:
             ui.notify(str(erreur), type="warning")
         else:
             nom.set_value("")
             prix.set_value(None)
             tva.set_value(TAUX_TVA_DEFAUT)
+            ponctuel.set_value(False)
             await recharger_catalogue()
             ui.notify("Produit ajouté", type="positive")
         finally:
@@ -202,7 +208,12 @@ async def produits() -> None:
         bouton_enregistrer.disable()
         try:
             modifie = await run.io_bound(
-                modifier_produit, produit_edite, nom_edition.value, montant, taux_tva_pour_mille=taux
+                modifier_produit,
+                produit_edite,
+                nom_edition.value,
+                montant,
+                taux_tva_pour_mille=taux,
+                ponctuel=bool(ponctuel_edition.value),
             )
         except ProduitInvalide as erreur:
             ui.notify(str(erreur), type="warning")
@@ -238,6 +249,7 @@ async def produits() -> None:
             nom_edition = ui.input("Nom").mark("nom-edition")
             prix_edition = _champ_prix("Prix TTC").mark("prix-edition")
             tva_edition = _champ_tva().mark("tva-edition")
+            ponctuel_edition = ui.checkbox("Ponctuel").mark("ponctuel-edition")
             with ui.row().classes("w-full justify-end gap-2 pt-2"):
                 ui.button("Annuler", on_click=dialogue.close).props("flat color=ardoise")
                 bouton_enregistrer = ui.button("Enregistrer", on_click=enregistrer).mark("enregistrer-produit")
@@ -247,6 +259,7 @@ async def produits() -> None:
                 nom = ui.input("Nom").classes("w-80").mark("nom-produit")
                 prix = _champ_prix("Prix TTC").classes("w-36").mark("prix-produit")
                 tva = _champ_tva().mark("tva-produit")
+                ponctuel = ui.checkbox("Ponctuel").mark("ponctuel-produit")
                 bouton_creer = ui.button("Ajouter le produit", icon="add", on_click=ajouter).mark("creer-produit")
         with ui.card().props("flat bordered").classes("w-full rounded-lg p-0 gap-0 overflow-x-auto"):
             with ui.row().classes("w-full items-center justify-between px-4 py-3 border-b border-slate-200"):

@@ -512,7 +512,11 @@ def ajouter_consommation(
 
 
 def creer_produit(
-    nom: str, prix_unitaire_centimes: int, *, taux_tva_pour_mille: int = TAUX_TVA_DEFAUT
+    nom: str,
+    prix_unitaire_centimes: int,
+    *,
+    taux_tva_pour_mille: int = TAUX_TVA_DEFAUT,
+    ponctuel: bool = False,
 ) -> int:
     propre = _exiger_nom_produit(nom)
     prix = _exiger_centimes(prix_unitaire_centimes)
@@ -520,14 +524,25 @@ def creer_produit(
     with get_session() as session:
         if _produit_nom_pris(session, propre):
             raise ProduitInvalide("Ce produit existe déjà")
-        produit = Produit(nom=propre, prix_unitaire_centimes=prix, taux_tva_pour_mille=taux, actif=True)
+        produit = Produit(
+            nom=propre,
+            prix_unitaire_centimes=prix,
+            taux_tva_pour_mille=taux,
+            actif=True,
+            ponctuel=bool(ponctuel),
+        )
         session.add(produit)
         _commit_produit(session)
         return produit.id
 
 
 def modifier_produit(
-    produit_id: int, nom: str, prix_unitaire_centimes: int, *, taux_tva_pour_mille: int = TAUX_TVA_DEFAUT
+    produit_id: int,
+    nom: str,
+    prix_unitaire_centimes: int,
+    *,
+    taux_tva_pour_mille: int = TAUX_TVA_DEFAUT,
+    ponctuel: bool | None = None,
 ) -> bool:
     propre = _exiger_nom_produit(nom)
     prix = _exiger_centimes(prix_unitaire_centimes)
@@ -536,13 +551,21 @@ def modifier_produit(
         produit = session.get(Produit, produit_id)
         if produit is None:
             raise ProduitInvalide("Ce produit est introuvable")
-        if produit.nom == propre and produit.prix_unitaire_centimes == prix and produit.taux_tva_pour_mille == taux:
+        # None laisse le drapeau tel quel : un ancien appel qui ne connaît pas « ponctuel » ne l'efface pas.
+        voulu = bool(produit.ponctuel) if ponctuel is None else bool(ponctuel)
+        if (
+            produit.nom == propre
+            and produit.prix_unitaire_centimes == prix
+            and produit.taux_tva_pour_mille == taux
+            and bool(produit.ponctuel) == voulu
+        ):
             return False
         if produit.nom != propre and _produit_nom_pris(session, propre, sauf=produit_id):
             raise ProduitInvalide("Ce produit existe déjà")
         produit.nom = propre
         produit.prix_unitaire_centimes = prix
         produit.taux_tva_pour_mille = taux
+        produit.ponctuel = voulu
         session.add(produit)
         _commit_produit(session)
         return True

@@ -274,7 +274,12 @@ def lister_produits(*, actifs_seulement: bool = False) -> list[Produit]:
     """Exemplaires détachés : la session est déjà fermée quand la page les lit."""
     with get_session() as session:
         requete = select(
-            Produit.id, Produit.nom, Produit.prix_unitaire_centimes, Produit.taux_tva_pour_mille, Produit.actif
+            Produit.id,
+            Produit.nom,
+            Produit.prix_unitaire_centimes,
+            Produit.taux_tva_pour_mille,
+            Produit.actif,
+            Produit.ponctuel,
         )
         if actifs_seulement:
             requete = requete.where(Produit.actif.is_(True))
@@ -286,8 +291,9 @@ def lister_produits(*, actifs_seulement: bool = False) -> list[Produit]:
             prix_unitaire_centimes=prix,
             taux_tva_pour_mille=taux,
             actif=bool(actif),
+            ponctuel=bool(ponctuel),
         )
-        for identifiant, nom, prix, taux, actif in lignes
+        for identifiant, nom, prix, taux, actif, ponctuel in lignes
     ]
     copies.sort(key=lambda produit: (produit.nom.casefold(), produit.id or 0))
     return copies

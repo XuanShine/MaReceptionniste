@@ -32,7 +32,7 @@ from ma_receptionniste.models import Client, ModeReglement, Reservation, StatutR
 from ma_receptionniste.pages.clients import PAYS_COURANTS
 from ma_receptionniste.pages.composants.facture import enregistrer_route_pdf, ouvrir_facturation
 from ma_receptionniste.pages.layout import ACTIF_DETAIL, badge, etat_vide, fermer_reservation, ouvrir_reservation, page
-from ma_receptionniste.pages.theme import date_courte, date_heure, heure_locale
+from ma_receptionniste.pages.theme import JOURS, date_courte, date_heure, heure_locale
 from ma_receptionniste.saisie import (
     CHAMPS_CLIENT,
     CHAMPS_FICHE,
@@ -556,6 +556,15 @@ async def fiche(reservation_id: int) -> None:
             ui.button("Ajouter", icon="add", on_click=ajouter).mark("ajouter-ponctuelle")
         champs_ponctuels["produit"] = produit_ponctuel
 
+    def _colonnes_ponctuelles(contenu: dict, paires: set[tuple[str, str]]) -> list[date]:
+        jours: set[date] = set()
+        for nom, produit in paires:
+            jours.update(_notes_paire(contenu, nom, produit))
+            for ligne in donnees["lignes"]:
+                if ligne["chambre_nom"] == nom:
+                    jours.update(jours_du_sejour(ligne))
+        return sorted(jours)
+
     def _paires_ponctuelles(contenu: dict) -> None:
         paires = set(couples_ajoutes)
         for cle, produits in (contenu.get("Consommation") or {}).items():
@@ -565,10 +574,36 @@ async def fiche(reservation_id: int) -> None:
             ui.label("Aucune consommation ponctuelle pour ce séjour.").classes("px-4 py-6 text-sm text-ardoise")
             return
         noms_catalogue = {produit.nom for produit in catalogue_complet}
-        for nom, produit in sorted(paires, key=lambda paire: (paire[0].casefold(), paire[1].casefold())):
-            _paire_ponctuelle(contenu, nom, produit, produit not in noms_catalogue)
+        colonnes = _colonnes_ponctuelles(contenu, paires)
+        aujourd_hui = date.today()
+        with ui.element("div").classes("w-full overflow-x-auto"):
+            with ui.element("table").classes("w-full text-sm border-collapse").mark("tableau-ponctuel"):
+                with ui.element("thead"), ui.element("tr"):
+                    for cle_entete, libelle in (("produit", "Produit"), ("chambre", "Chambre"), ("nombre", "Nombre")):
+                        _entete_ponctuel(cle_entete, libelle, A_GAUCHE)
+                    for jour in colonnes:
+                        _entete_date_ponctuelle(jour, aujourd_hui)
+                    _entete_ponctuel("total", "Total", A_DROITE)
+                    _entete_ponctuel("actions", "", A_GAUCHE)
+                with ui.element("tbody"):
+                    for nom, produit in sorted(paires, key=lambda paire: (paire[1].casefold(), paire[0].casefold())):
+                        _paire_ponctuelle(
+                            contenu,
+                            nom,
+                            produit,
+                            produit not in noms_catalogue,
+                            colonnes,
+                            aujourd_hui,
+                        )
 
-    def _paire_ponctuelle(contenu: dict, nom: str, produit: str, gris: bool) -> None:
+    def _paire_ponctuelle(
+        contenu: dict,
+        nom: str,
+        produit: str,
+        gris: bool,
+        colonnes: list[date],
+        aujourd_hui: date,
+    ) -> None:
         notes = _notes_paire(contenu, nom, produit)
         cle = (nom, produit)
         if cle not in nombres_choisis:
@@ -578,10 +613,13 @@ async def fiche(reservation_id: int) -> None:
                 if isinstance(valeur, int) and not isinstance(valeur, bool) and valeur > 0
             }
             nombres_choisis[cle] = valeurs.pop() if len(valeurs) == 1 else 1
-        jours = set(notes)
-        for ligne in donnees["lignes"]:
-            if ligne["chambre_nom"] == nom:
-                jours.update(jours_du_sejour(ligne))
+        jours_sejour = {
+            jour
+            for ligne in donnees["lignes"]
+            if ligne["chambre_nom"] == nom
+            for jour in jours_du_sejour(ligne)
+        }
+        applicables = set(notes) | jours_sejour
         total = totaux_note(contenu).get((cle_chambre(nom), produit), 0)
 
         def memoriser_nombre(evenement, cle: tuple[str, str] = cle) -> None:
@@ -637,33 +675,43 @@ async def fiche(reservation_id: int) -> None:
             couples_ajoutes.discard((nom, produit))
             await executer_ponctuelle(OperationPonctuelle("tout_retirer", nom, produit))
 
-        with ui.column().classes("w-full gap-2 px-4 py-3 border-b border-slate-100"):
-            with ui.row().classes("w-full items-center justify-between gap-3 no-wrap"):
-                with ui.row().classes("items-center gap-2"):
-                    titre = ui.label(f"{produit} · Chambre {nom}").classes(
-                        "text-sm font-medium text-slate-400" if gris else "text-sm font-medium"
-                    )
-                    if gris:
-                        titre.mark(f"gris-ponctuel|{produit}")
-                        ui.label("Hors catalogue").classes("text-xs text-slate-400")
-                ui.label(f"Total : {total}").classes("text-sm tabular-nums").mark(f"total-ponctuel|{nom}|{produit}")
-            with ui.row().classes("w-full items-center gap-2"):
+        with ui.element("tr"):
+            with ui.element("td").classes(f"{TD} align-middle"):
+                titre = ui.label(produit).classes(
+                    "text-sm font-medium text-slate-400" if gris else "text-sm font-medium"
+                )
+                if gris:
+                    titre.mark(f"gris-ponctuel|{produit}")
+                    ui.label("Hors catalogue").classes("text-xs text-slate-400")
+            with ui.element("td").classes(f"{TD} align-middle"):
+                ui.label(nom)
+            with _cellule_saisie():
                 (
-                    ui.number("Nombre", value=nombres_choisis[cle], min=1, precision=0, format="%d")
-                    .classes("w-28")
+                    ui.number(value=nombres_choisis[cle], min=1, precision=0, format="%d")
+                    .props(f"{PROPS_SAISIE} input-class=text-right")
+                    .classes("w-16")
                     .on_value_change(memoriser_nombre)
+                    .mark(f"nombre-ligne|{nom}|{produit}")
                 )
-                ui.button("Tout sélectionner", on_click=selectionner).props("outline dense").mark(
-                    f"tout-ponctuel|{nom}|{produit}"
-                )
-                ui.button("Tout retirer", on_click=retirer).props("outline dense color=ardoise").mark(
-                    f"retirer-ponctuel|{nom}|{produit}"
-                )
-            with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1"):
-                for jour in sorted(jours):
-                    case = ui.checkbox(date_courte(jour), value=jour in notes).props("dense")
+            for jour in colonnes:
+                hors = jour in notes and jour not in jours_sejour
+                fond = "bg-primary-pale" if jour == aujourd_hui else "bg-warning-soft" if hors else ""
+                with ui.element("td").classes(f"px-1 h-9 border-b border-slate-100 text-center align-middle {fond}"):
+                    if jour not in applicables:
+                        continue
+                    case = ui.checkbox(value=jour in notes).props("dense")
                     case.on_value_change(lambda evenement, jour=jour: changer_case(evenement, jour))
                     case.mark(f"case-ponctuelle|{nom}|{produit}|{jour.isoformat()}")
+            with ui.element("td").classes(f"{TD} text-right align-middle font-semibold"):
+                ui.label(str(total)).mark(f"total-ponctuel|{nom}|{produit}")
+            with ui.element("td").classes("px-2 border-b border-slate-100 align-middle"):
+                with ui.row().classes("no-wrap items-center gap-1"):
+                    ui.button(icon="select_all", on_click=selectionner).props("flat dense round").tooltip(
+                        "Tout sélectionner"
+                    ).mark(f"tout-ponctuel|{nom}|{produit}")
+                    ui.button(icon="deselect", on_click=retirer).props("flat dense round color=ardoise").tooltip(
+                        "Tout retirer"
+                    ).mark(f"retirer-ponctuel|{nom}|{produit}")
 
     def compter() -> None:
         for cle, onglet in onglets_comptes.items():
@@ -1043,6 +1091,24 @@ def _tableau_lignes() -> tuple[ui.element, ui.element, ui.element]:
         brouillon = ui.element("tbody")
         pied = ui.element("tbody")
     return persiste, brouillon, pied
+
+
+def _entete_ponctuel(cle: str, libelle: str, classes: str) -> None:
+    with ui.element("th").classes(f"{TH} {classes}").mark(f"entete-ponctuel|{cle}"):
+        ui.label(libelle)
+
+
+def _entete_date_ponctuelle(jour: date, aujourd_hui: date) -> None:
+    courant = jour == aujourd_hui
+    fond = "bg-primary-pale text-primary" if courant else "bg-slate-50 text-ardoise"
+    with (
+        ui.element("th")
+        .classes(f"px-2 py-1 border-b border-slate-200 text-center whitespace-nowrap {fond}")
+        .mark(f"entete-ponctuel|{jour.isoformat()}")
+    ):
+        with ui.column().classes("items-center gap-0"):
+            ui.label(f"{JOURS[jour.weekday()][:3]}.").classes("text-[11px] uppercase tracking-wide")
+            ui.label(f"{jour:%d/%m}").classes("text-sm font-semibold tabular-nums leading-tight")
 
 
 def _alerte_ponctuelle(messages: list[str]) -> None:

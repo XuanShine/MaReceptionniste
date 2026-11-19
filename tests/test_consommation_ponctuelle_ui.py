@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date
+from datetime import date, timedelta
 
 from nicegui import ui
 from nicegui.testing import User
@@ -74,11 +74,11 @@ async def _attendre_historique(reservation_id: int, description: str) -> None:
     raise AssertionError([note["description"] for note in fiche_sejour(reservation_id)["historique"]])
 
 
-def _sejour() -> tuple[int, int, str]:
+def _sejour(debut: date = ARRIVEE, fin: date = DEPART) -> tuple[int, int, str]:
     reservation_id = creer_reservation(creer_client("LE CLOEREC", pays="France"))
     chambre = f"12-{reservation_id}"
     chambre_id = creer_chambre(chambre, 1, type_chambre_id=_type_single_bb())
-    sejour_id = ajouter_sejour(reservation_id, chambre_id, ARRIVEE, DEPART, prix_nuit_centimes=5000)
+    sejour_id = ajouter_sejour(reservation_id, chambre_id, debut, fin, prix_nuit_centimes=5000)
     return reservation_id, sejour_id, chambre
 
 
@@ -102,7 +102,13 @@ async def test_l_onglet_coche_la_note_et_le_point_rouge_suit_les_dates(user: Use
     gris = _champ(user, "gris-ponctuel|Ancien buffet")
     assert "text-slate-400" in gris.classes
     await user.should_see("Hors catalogue")
-    assert _champ(user, f"case-ponctuelle|{chambre}|Ancien buffet|2026-11-11").value is True
+    assert _champ(user, "tableau-ponctuel").tag == "table"
+    assert _champ(user, "entete-ponctuel|produit").tag == "th"
+    assert _champ(user, "entete-ponctuel|chambre").tag == "th"
+    assert _champ(user, "entete-ponctuel|nombre").tag == "th"
+    case_ancien = _champ(user, f"case-ponctuelle|{chambre}|Ancien buffet|2026-11-11")
+    assert case_ancien.value is True
+    assert any(parent.tag == "td" for parent in case_ancien.ancestors())
 
     _champ(user, "produit-ponctuel").set_value(petit_dejeuner)
     _champ(user, "chambre-ponctuelle").set_value(chambre)
@@ -115,7 +121,7 @@ async def test_l_onglet_coche_la_note_et_le_point_rouge_suit_les_dates(user: Use
     user.find(marker=case).click()
     await _attendre_historique(reservation_id, f"{PRODUIT} · Chambre {chambre} · 12/11 : 2")
     await user.should_see(marker=f"total-ponctuel|{chambre}|{PRODUIT}", retries=20)
-    assert _champ(user, f"total-ponctuel|{chambre}|{PRODUIT}").text == "Total : 2"
+    assert _champ(user, f"total-ponctuel|{chambre}|{PRODUIT}").text == "2"
     note = lire(fiche_sejour(reservation_id)["reservation"]["notes_internes"])
     assert note["Consommation"][cle_chambre(chambre)][PRODUIT][JOUR_COCHE] == 2
     assert "Ancien buffet" in note["Consommation"][cle_chambre(chambre)]
@@ -148,6 +154,23 @@ async def test_l_onglet_coche_la_note_et_le_point_rouge_suit_les_dates(user: Use
     assert PRODUIT not in note["Consommation"][cle_chambre(chambre)]
     assert note["Consommation"][cle_chambre(chambre)]["Ancien buffet"][date(2026, 11, 11)] == 1
     assert fiche_sejour(reservation_id)["consommations"] == []
+
+
+async def test_la_colonne_du_jour_est_surlignee(user: User) -> None:
+    aujourd_hui = date.today()
+    reservation_id, _, chambre = _sejour(aujourd_hui - timedelta(days=1), aujourd_hui + timedelta(days=1))
+    _poser(
+        reservation_id,
+        ecrire({"Consommation": {cle_chambre(chambre): {"Ancien buffet": {aujourd_hui: 1}}}}),
+    )
+
+    await _ouvrir(user, "ponctuelle-jour@hotel-panorama.fr", reservation_id)
+    assert "bg-primary-pale" in _champ(user, f"entete-ponctuel|{aujourd_hui.isoformat()}").classes
+    veille = aujourd_hui - timedelta(days=1)
+    assert "bg-primary-pale" not in _champ(user, f"entete-ponctuel|{veille.isoformat()}").classes
+    case = _champ(user, f"case-ponctuelle|{chambre}|Ancien buffet|{aujourd_hui.isoformat()}")
+    cellule = next(parent for parent in case.ancestors() if parent.tag == "td")
+    assert "bg-primary-pale" in cellule.classes
 
 
 async def test_une_note_illisible_laisse_l_onglet_en_lecture_seule(user: User) -> None:

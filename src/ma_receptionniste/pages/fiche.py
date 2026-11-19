@@ -579,8 +579,8 @@ async def fiche(reservation_id: int) -> None:
         with ui.element("div").classes("w-full overflow-x-auto"):
             with ui.element("table").classes("w-full text-sm border-collapse").mark("tableau-ponctuel"):
                 with ui.element("thead"), ui.element("tr"):
-                    for cle_entete, libelle in (("produit", "Produit"), ("chambre", "Chambre"), ("nombre", "Nombre")):
-                        _entete_ponctuel(cle_entete, libelle, A_GAUCHE)
+                    _entete_ponctuel("produit", "Produit · Chambre", A_GAUCHE)
+                    _entete_ponctuel("nombre", "Nombre", A_GAUCHE)
                     for jour in colonnes:
                         _entete_date_ponctuelle(jour, aujourd_hui)
                     _entete_ponctuel("total", "Total", A_DROITE)
@@ -676,16 +676,17 @@ async def fiche(reservation_id: int) -> None:
             await executer_ponctuelle(OperationPonctuelle("tout_retirer", nom, produit))
 
         with ui.element("tr"):
-            with ui.element("td").classes(f"{TD} align-middle"):
-                titre = ui.label(produit).classes(
-                    "text-sm font-medium text-slate-400" if gris else "text-sm font-medium"
-                )
-                if gris:
-                    titre.mark(f"gris-ponctuel|{produit}")
-                    ui.label("Hors catalogue").classes("text-xs text-slate-400")
-            with ui.element("td").classes(f"{TD} align-middle"):
-                ui.label(nom)
-            with _cellule_saisie():
+            with ui.element("td").classes(f"{TD} align-middle whitespace-nowrap w-px"):
+                with ui.row().classes("items-baseline gap-1.5 no-wrap"):
+                    titre = ui.label(produit).classes(
+                        "font-medium text-slate-400" if gris else "font-medium"
+                    )
+                    ui.label("·").classes("text-ardoise")
+                    ui.label(nom).classes("text-ardoise")
+                    if gris:
+                        titre.mark(f"gris-ponctuel|{produit}")
+                        ui.label("Hors catalogue").classes("text-xs text-slate-400")
+            with _cellule_saisie().classes("w-px"):
                 (
                     ui.number(value=nombres_choisis[cle], min=1, precision=0, format="%d")
                     .props(f"{PROPS_SAISIE} input-class=text-right")

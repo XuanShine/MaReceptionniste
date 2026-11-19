@@ -104,8 +104,10 @@ async def test_l_onglet_coche_la_note_et_le_point_rouge_suit_les_dates(user: Use
     await user.should_see("Hors catalogue")
     assert _champ(user, "tableau-ponctuel").tag == "table"
     assert _champ(user, "entete-ponctuel|produit").tag == "th"
-    assert _champ(user, "entete-ponctuel|chambre").tag == "th"
+    await user.should_see("Produit · Chambre")
     assert _champ(user, "entete-ponctuel|nombre").tag == "th"
+    cellule = next(parent for parent in gris.ancestors() if parent.tag == "td")
+    assert any(getattr(element, "text", None) == chambre for element in cellule.descendants())
     case_ancien = _champ(user, f"case-ponctuelle|{chambre}|Ancien buffet|2026-11-11")
     assert case_ancien.value is True
     assert any(parent.tag == "td" for parent in case_ancien.ancestors())

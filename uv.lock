@@ -567,6 +567,7 @@ source = { editable = "." }
 dependencies = [
     { name = "nicegui" },
     { name = "python-odt-template", extra = ["jinja"] },
+    { name = "pyyaml" },
     { name = "sqlmodel" },
     { name = "wubook" },
 ]
@@ -582,6 +583,7 @@ dev = [
 requires-dist = [
     { name = "nicegui", specifier = ">=3.18.0" },
     { name = "python-odt-template", extras = ["jinja"], specifier = "==0.5.1" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sqlmodel", specifier = ">=0.0.48" },
     { name = "wubook", git = "https://github.com/XuanShine/wubook" },
 ]

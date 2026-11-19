@@ -216,6 +216,8 @@ class Produit(SQLModel, table=True):
     # Millièmes : 200 = 20 %, 100 = 10 %, 55 = 5,5 %, 21 = 2,1 %, 0 = exonéré.
     taux_tva_pour_mille: int = Field(default=100, sa_column_kwargs={"server_default": "100"})
     actif: bool = Field(default=True, sa_column_kwargs={"server_default": "1"})
+    # Petit-déjeuner et autres produits notés jour par jour, pas vendus à chaque passage.
+    ponctuel: bool = Field(default=False, sa_column_kwargs={"server_default": "0"})
 
 
 class Consommation(SQLModel, table=True):

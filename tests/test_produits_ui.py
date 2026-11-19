@@ -90,3 +90,26 @@ async def test_creer_rechercher_modifier_et_desactiver_un_produit(user: User) ->
         user.find("Réactiver").click()
     await user.should_see("Produit réactivé")
     assert next(produit for produit in lister_produits() if produit.id == pomme).actif is True
+
+
+async def test_la_case_ponctuel_est_enregistree(user: User) -> None:
+    await _ouvrir(user)
+    await user.open("/produits")
+    _champ(user, "nom-produit").set_value("Brunch page")
+    _champ(user, "prix-produit").set_value(9)
+    _champ(user, "ponctuel-produit").set_value(True)
+    user.find(marker="creer-produit").click()
+    await user.should_see("Produit ajouté")
+
+    brunch = next(produit for produit in lister_produits() if produit.nom == "Brunch page")
+    assert brunch.ponctuel is True
+    await user.should_see(f"ponctuel-etat-{brunch.id}")
+    assert _champ(user, f"ponctuel-etat-{brunch.id}").text == "Oui"
+
+    user.find(marker=f"modifier-produit-{brunch.id}").click()
+    assert _champ(user, "ponctuel-edition").value is True
+    _champ(user, "ponctuel-edition").set_value(False)
+    user.find(marker="enregistrer-produit").click()
+    await user.should_see("Produit modifié")
+    assert next(produit for produit in lister_produits() if produit.id == brunch.id).ponctuel is False
+    assert _champ(user, f"ponctuel-etat-{brunch.id}").text == "—"

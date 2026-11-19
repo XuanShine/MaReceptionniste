@@ -19,6 +19,7 @@ from ma_receptionniste.models import (
     Consommation,
     ModeReglement,
     OccupationChambre,
+    Produit,
     Reglement,
     Reservation,
     Sejour,
@@ -708,3 +709,40 @@ def test_migration_cree_et_preserve_la_table_de_liaison() -> None:
             ("chambre_virtuelle", "chambre_virtuelle_id", "id", "CASCADE"),
         }
         assert connexion.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+
+
+ANCIEN_PRODUIT = """
+CREATE TABLE produit (
+    id INTEGER NOT NULL PRIMARY KEY,
+    nom VARCHAR NOT NULL UNIQUE,
+    prix_unitaire_centimes INTEGER NOT NULL DEFAULT 0,
+    taux_tva_pour_mille INTEGER NOT NULL DEFAULT 100,
+    actif BOOLEAN NOT NULL DEFAULT 1
+);
+INSERT INTO produit (id, nom, prix_unitaire_centimes, taux_tva_pour_mille, actif)
+VALUES (1, 'Petit-déjeuner', 1400, 100, 1);
+"""
+
+
+def test_produit_ponctuel_s_ajoute_sur_l_ancien_schema() -> None:
+    engine = ancienne_base(ANCIEN_PRODUIT)
+
+    ajoutees = ajouter_colonnes_manquantes(engine)
+
+    assert "produit.ponctuel" in ajoutees
+    assert "produit.ponctuel" not in ajouter_colonnes_manquantes(engine)
+    with engine.connect() as connexion:
+        info = next(
+            ligne for ligne in connexion.exec_driver_sql("PRAGMA table_info('produit')") if ligne[1] == "ponctuel"
+        )
+        assert info[3] == 1
+        assert str(info[4]) in {"0", "'0'"}
+    with Session(engine) as session:
+        produit = session.get(Produit, 1)
+        assert produit is not None
+        assert produit.ponctuel is False
+        assert (produit.nom, produit.prix_unitaire_centimes, produit.actif) == ("Petit-déjeuner", 1400, True)
+        produit.ponctuel = True
+        session.add(produit)
+        session.commit()
+        assert session.get(Produit, 1).ponctuel is True

@@ -1,10 +1,13 @@
 import threading
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from ma_receptionniste.consommation_ponctuelle import basculer, ecrire, lire, tout_cocher, tout_retirer
 from ma_receptionniste.consultations import MODE_REGLEMENT_LABEL
 from ma_receptionniste.db import get_session
 from ma_receptionniste.facturation import (
@@ -73,6 +76,18 @@ class CatalogueInvalide(ValueError):
 
 class ProduitInvalide(ValueError):
     """Un produit ou une vente de produit est refusé."""
+
+
+@dataclass(frozen=True)
+class OperationPonctuelle:
+    """Une modification de la note : une case, toutes les dates, ou le retrait du produit."""
+
+    action: Literal["basculer", "tout_cocher", "tout_retirer"]
+    chambre: str
+    produit: str
+    jour: date | None = None
+    jours: tuple[date, ...] = ()
+    nombre: int | None = None
 
 
 
@@ -491,6 +506,51 @@ def supprimer_sejour(sejour_id: int, user_id: int | None = None) -> None:
         session.commit()
 
 
+def modifier_consommation_ponctuelle(
+    reservation_id: int, operation: OperationPonctuelle, user_id: int | None
+) -> None:
+    """Lit, modifie et réécrit la note dans la même transaction que le journal.
+
+    Une note illisible lève ``NoteIllisible`` avant toute écriture.
+    """
+    with get_session() as session:
+        reservation = session.get(Reservation, reservation_id)
+        if reservation is None:
+            raise FicheInvalide("Réservation introuvable")
+        actuelles = lire(reservation.notes_internes)
+        nouvelles = _appliquer_ponctuelle(actuelles, operation)
+        if ecrire(nouvelles) == ecrire(actuelles):
+            return
+        reservation.notes_internes = ecrire(nouvelles) or None
+        session.add(reservation)
+        _journaliser(session, reservation_id, user_id, _decrire_ponctuelle(operation))
+        session.commit()
+
+
+def _appliquer_ponctuelle(donnees: dict, operation: OperationPonctuelle) -> dict:
+    if operation.action == "basculer":
+        if operation.jour is None:
+            raise ValueError("La date est obligatoire")
+        return basculer(donnees, operation.chambre, operation.produit, operation.jour, operation.nombre)
+    if operation.action == "tout_cocher":
+        if operation.nombre is None:
+            raise ValueError("Le nombre est obligatoire")
+        return tout_cocher(donnees, operation.chambre, operation.produit, operation.jours, operation.nombre)
+    if operation.action == "tout_retirer":
+        return tout_retirer(donnees, operation.chambre, operation.produit)
+    raise ValueError("Opération inconnue")
+
+
+def _decrire_ponctuelle(operation: OperationPonctuelle) -> str:
+    lieu = f"Chambre {operation.chambre}"
+    if operation.action == "basculer":
+        valeur = "retiré" if operation.nombre is None else str(operation.nombre)
+        return f"{operation.produit} · {lieu} · {operation.jour:%d/%m} : {valeur}"
+    if operation.action == "tout_cocher":
+        return f"{operation.produit} · {lieu} · tout sélectionné : {operation.nombre}"
+    return f"{operation.produit} · {lieu} · tout retiré"
+
+
 def ajouter_consommation(
     reservation_id: int, libelle: str, quantite: int, prix_unitaire_centimes: int, user_id: int | None = None
 ) -> int:
@@ -512,7 +572,11 @@ def ajouter_consommation(
 
 
 def creer_produit(
-    nom: str, prix_unitaire_centimes: int, *, taux_tva_pour_mille: int = TAUX_TVA_DEFAUT
+    nom: str,
+    prix_unitaire_centimes: int,
+    *,
+    taux_tva_pour_mille: int = TAUX_TVA_DEFAUT,
+    ponctuel: bool = False,
 ) -> int:
     propre = _exiger_nom_produit(nom)
     prix = _exiger_centimes(prix_unitaire_centimes)
@@ -520,14 +584,25 @@ def creer_produit(
     with get_session() as session:
         if _produit_nom_pris(session, propre):
             raise ProduitInvalide("Ce produit existe déjà")
-        produit = Produit(nom=propre, prix_unitaire_centimes=prix, taux_tva_pour_mille=taux, actif=True)
+        produit = Produit(
+            nom=propre,
+            prix_unitaire_centimes=prix,
+            taux_tva_pour_mille=taux,
+            actif=True,
+            ponctuel=bool(ponctuel),
+        )
         session.add(produit)
         _commit_produit(session)
         return produit.id
 
 
 def modifier_produit(
-    produit_id: int, nom: str, prix_unitaire_centimes: int, *, taux_tva_pour_mille: int = TAUX_TVA_DEFAUT
+    produit_id: int,
+    nom: str,
+    prix_unitaire_centimes: int,
+    *,
+    taux_tva_pour_mille: int = TAUX_TVA_DEFAUT,
+    ponctuel: bool | None = None,
 ) -> bool:
     propre = _exiger_nom_produit(nom)
     prix = _exiger_centimes(prix_unitaire_centimes)
@@ -536,13 +611,21 @@ def modifier_produit(
         produit = session.get(Produit, produit_id)
         if produit is None:
             raise ProduitInvalide("Ce produit est introuvable")
-        if produit.nom == propre and produit.prix_unitaire_centimes == prix and produit.taux_tva_pour_mille == taux:
+        # None laisse le drapeau tel quel : un ancien appel qui ne connaît pas « ponctuel » ne l'efface pas.
+        voulu = bool(produit.ponctuel) if ponctuel is None else bool(ponctuel)
+        if (
+            produit.nom == propre
+            and produit.prix_unitaire_centimes == prix
+            and produit.taux_tva_pour_mille == taux
+            and bool(produit.ponctuel) == voulu
+        ):
             return False
         if produit.nom != propre and _produit_nom_pris(session, propre, sauf=produit_id):
             raise ProduitInvalide("Ce produit existe déjà")
         produit.nom = propre
         produit.prix_unitaire_centimes = prix
         produit.taux_tva_pour_mille = taux
+        produit.ponctuel = voulu
         session.add(produit)
         _commit_produit(session)
         return True

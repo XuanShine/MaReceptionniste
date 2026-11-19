@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
-from ma_receptionniste.consultations import nuits_entre, planning, segments
+from ma_receptionniste.consultations import nom_planning, nuits_entre, planning, segments
 from ma_receptionniste.models import Chambre, Client, Reservation, Sejour, StatutReservation
 
 NUIT_10 = date(2026, 10, 10)
@@ -88,3 +88,12 @@ def test_le_planning_affiche_l_occupant_plutot_que_le_compte(session: Session) -
     data = planning(session, NUIT_10, date(2026, 10, 13))
 
     assert data["sejours"][0]["nom"] == "LE CLOEREC Benedicte"
+
+
+def test_le_nom_du_bloc_porte_le_symbole_du_statut() -> None:
+    nom = "LE CLOEREC Benedicte"
+    assert nom_planning(nom, StatutReservation.option_devis) == f"📄 {nom}"
+    assert nom_planning(nom, StatutReservation.confirmee) == f"📁 {nom}"
+    assert nom_planning(nom, StatutReservation.en_cours) == f"▶️ {nom}"
+    assert nom_planning(nom, StatutReservation.parti) == f"👋 {nom}"
+    assert nom_planning(nom, StatutReservation.annulee) == nom

@@ -19,6 +19,7 @@ def test_les_statuts_affichables() -> None:
         "Parti",
         "Annulée",
     ]
+    assert [STATUT_SEJOUR[statut].symbole for statut in StatutReservation] == ["📄", "📁", "▶️", "👋", ""]
 
 
 def test_resume_du_jour() -> None:

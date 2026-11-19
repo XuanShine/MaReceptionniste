@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 from nicegui import run, ui
 
-from ma_receptionniste.consultations import STATUT_SEJOUR, charger_planning, segments
+from ma_receptionniste.consultations import STATUT_SEJOUR, charger_planning, nom_planning, segments
 from ma_receptionniste.pages.layout import CHEMIN_PARAMETRES, etat_vide, page
 from ma_receptionniste.pages.theme import JOURS, MOIS, date_courte
 from ma_receptionniste.saisie import basculer_etat
@@ -121,6 +121,7 @@ def _ligne(chambre: dict, jours: list[date], aujourd_hui: date, sejours: list[di
 
 def _bloc(sejour: dict, longueur: int, jours: list[date]) -> None:
     couleur = STATUT_SEJOUR[sejour["statut"]].couleur
+    nom = nom_planning(sejour["nom"], sejour["statut"])
     arrondi = ("rounded-l-none" if sejour["date_debut"] < jours[0] else "") + (
         " rounded-r-none" if sejour["date_fin"] > jours[-1] + timedelta(days=1) else ""
     )
@@ -138,8 +139,8 @@ def _bloc(sejour: dict, longueur: int, jours: list[date]) -> None:
         ):
             ui.element("div").classes(f"w-1 shrink-0 bg-{couleur}")
             with ui.column().classes("gap-0 px-2 justify-center min-w-0"):
-                ui.label(sejour["nom"]).classes("text-[13px] font-semibold leading-tight truncate")
+                ui.label(nom).classes("text-[13px] font-semibold leading-tight truncate")
                 if sejour["partenaire"]:
                     ui.label(sejour["partenaire"]).classes("text-[11px] leading-tight opacity-75 truncate")
             periode = f"{date_courte(sejour['date_debut'])} → {date_courte(sejour['date_fin'])}"
-            ui.tooltip(" · ".join(filter(None, (sejour["nom"], sejour["partenaire"], periode))))
+            ui.tooltip(" · ".join(filter(None, (nom, sejour["partenaire"], periode))))

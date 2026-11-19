@@ -41,15 +41,22 @@ MODE_REGLEMENT_LABEL = {
 class Affichage(NamedTuple):
     libelle: str
     couleur: str
+    symbole: str
 
 
 STATUT_SEJOUR = {
-    StatutReservation.option_devis: Affichage("Option Devis", "warning"),
-    StatutReservation.confirmee: Affichage("Confirmé", "positive"),
-    StatutReservation.en_cours: Affichage("En cours", "primary"),
-    StatutReservation.parti: Affichage("Parti", "ardoise"),
-    StatutReservation.annulee: Affichage("Annulée", "negative"),
+    StatutReservation.option_devis: Affichage("Option Devis", "warning", "📄"),
+    StatutReservation.confirmee: Affichage("Confirmé", "positive", "📁"),
+    StatutReservation.en_cours: Affichage("En cours", "primary", "▶️"),
+    StatutReservation.parti: Affichage("Parti", "ardoise", "👋"),
+    StatutReservation.annulee: Affichage("Annulée", "negative", ""),
 }
+
+
+def nom_planning(nom: str, statut: StatutReservation) -> str:
+    """Nom d'un séjour sur le planning, précédé du symbole de son statut."""
+    symbole = STATUT_SEJOUR[statut].symbole
+    return f"{symbole} {nom}" if symbole else nom
 
 
 @dataclass(frozen=True)

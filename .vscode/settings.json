@@ -1,3 +1,4 @@
 {
-  "python.defaultInterpreterPath": "/home/xuan/Projects/MaReceptionniste/.venv/bin/python"
+  "python.defaultInterpreterPath": "/home/xuan/Projects/MaReceptionniste/.venv/bin/python",
+  "python.terminal.useEnvFile": true
 }
